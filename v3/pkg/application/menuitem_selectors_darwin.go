@@ -8,7 +8,7 @@ import "C"
 
 var roleToSelector = map[Role]string{
 	//AppMenu:             "", // This is a special case, handled separately
-	About: "orderFrontStandardAboutPanel:",
+	About: "", // We prefer the previous About dialog "orderFrontStandardAboutPanel:",
 	//ServicesMenu:        "", // This is a submenu, no direct selector
 	Hide:       "hide:",
 	HideOthers: "hideOtherApplications:",
