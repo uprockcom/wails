@@ -1,7 +1,7 @@
 package main
 
 import (
-	_ "embed"
+	"embed"
 	"fmt"
 	"log"
 	"math/rand"
@@ -20,16 +20,71 @@ var getExStyle = func() int {
 	return 0
 }
 
+//go:embed assets/*
+var assets embed.FS
+
+type WindowService struct{}
+
+// ==============================================
+func (s *WindowService) SetPos(relative bool, x, y float64) {
+	win := application.Get().CurrentWindow()
+	initX, initY := win.Position()
+	if relative {
+		x += float64(initX)
+		y += float64(initY)
+	}
+	win.SetPosition(int(x), int(y))
+	currentX, currentY := win.Position()
+	fmt.Printf("SetPos: %d, %d => %d, %d\n", initX, initY, currentX, currentY)
+}
+func (s *WindowService) SetSize(relative bool, wdt, hgt float64) {
+	win := application.Get().CurrentWindow()
+	initW, initH := win.Size()
+	if relative {
+		wdt += float64(initW)
+		hgt += float64(initH)
+	}
+	win.SetSize(int(wdt), int(hgt))
+	currentW, currentH := win.Size()
+	fmt.Printf("SetSize: %d, %d => %d, %d\n", initW, initH, currentW, currentH)
+}
+func (s *WindowService) SetBounds(x, y, w, h float64) {
+	win := application.Get().CurrentWindow()
+	initR := win.Bounds()
+	win.SetBounds(application.Rect{
+		X:      int(x),
+		Y:      int(y),
+		Width:  int(w),
+		Height: int(h),
+	})
+	currentR := win.Bounds()
+	fmt.Printf("SetBounds: %+v => %+v\n", initR, currentR)
+}
+func (s *WindowService) GetBounds() application.Rect {
+	win := application.Get().CurrentWindow()
+	r := win.Bounds()
+	mid := r.X + (r.Width-1)/2
+	fmt.Printf("GetBounds: %+v: mid: %d\n", r, mid)
+	return r
+}
+
+// ==============================================
+
 func main() {
 	app := application.New(application.Options{
 		Name:        "WebviewWindow Demo",
 		Description: "A demo of the WebviewWindow API",
-		Assets:      application.AlphaAssets,
+		Assets: application.AssetOptions{
+			Handler: application.BundledAssetFileServer(assets),
+		},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
+		Services: []application.Service{
+			application.NewService(&WindowService{}),
+		},
 	})
-	app.On(events.Common.ApplicationStarted, func(event *application.Event) {
+	app.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
 		log.Println("ApplicationDidFinishLaunching")
 	})
 
@@ -164,7 +219,7 @@ func main() {
 				SetRelativePosition(rand.Intn(1000), rand.Intn(800)).
 				SetURL("https://wails.io").
 				Show()
-			w.On(events.Common.WindowDidMove, func(event *application.WindowEvent) {
+			w.OnWindowEvent(events.Common.WindowDidMove, func(event *application.WindowEvent) {
 				x, y := w.Position()
 				fmt.Printf("WindowDidMove event triggered. New position: (%d, %d)\n", x, y)
 			})
@@ -181,7 +236,7 @@ func main() {
 				SetRelativePosition(rand.Intn(1000), rand.Intn(800)).
 				SetURL("https://wails.io").
 				Show()
-			w.On(events.Common.WindowDidResize, func(event *application.WindowEvent) {
+			w.OnWindowEvent(events.Common.WindowDidResize, func(event *application.WindowEvent) {
 				width, height := w.Size()
 
 				fmt.Printf("WindowDidResize event triggered. New size: (%d, %d)\n", width, height)
@@ -403,6 +458,12 @@ func main() {
 			w.SetRelativePosition(0, 0)
 		})
 	})
+	positionMenu.Add("Set Relative Position (Corner)").OnClick(func(ctx *application.Context) {
+		currentWindow(func(w *application.WebviewWindow) {
+			screen, _ := w.GetScreen()
+			w.SetRelativePosition(screen.WorkArea.Width-w.Width(), screen.WorkArea.Height-w.Height())
+		})
+	})
 	positionMenu.Add("Set Relative Position (Random)").OnClick(func(ctx *application.Context) {
 		currentWindow(func(w *application.WebviewWindow) {
 			w.SetRelativePosition(rand.Intn(1000), rand.Intn(800))
@@ -585,6 +646,7 @@ func main() {
 	})
 
 	app.NewWebviewWindowWithOptions(application.WebviewWindowOptions{
+		Title:            "Window Demo",
 		BackgroundColour: application.NewRGB(33, 37, 41),
 		Mac: application.MacWindow{
 			DisableShadow: true,

@@ -11,6 +11,7 @@ import (
 	"github.com/leaanthony/u"
 
 	"github.com/samber/lo"
+	"github.com/wailsapp/wails/v3/internal/assetserver"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
@@ -44,7 +45,6 @@ type (
 		size() (int, int)
 		width() int
 		height() int
-		relativePosition() (int, int)
 		destroy()
 		reload()
 		forceReload()
@@ -57,7 +57,6 @@ type (
 		close()
 		zoom()
 		setHTML(html string)
-		setRelativePosition(x int, y int)
 		on(eventID uint)
 		minimise()
 		unminimise()
@@ -82,8 +81,14 @@ type (
 		startResize(border string) error
 		print() error
 		setEnabled(enabled bool)
+		physicalBounds() Rect
+		setPhysicalBounds(physicalBounds Rect)
+		bounds() Rect
+		setBounds(bounds Rect)
 		position() (int, int)
 		setPosition(x int, y int)
+		relativePosition() (int, int)
+		setRelativePosition(x int, y int)
 		flash(enabled bool)
 		handleKeyEvent(acceleratorString string)
 		getBorderSizes() *LRTB
@@ -92,6 +97,13 @@ type (
 		setCloseButtonState(state ButtonState)
 		isIgnoreMouseEvents() bool
 		setIgnoreMouseEvents(ignore bool)
+		cut()
+		copy()
+		paste()
+		undo()
+		delete()
+		selectAll()
+		redo()
 	}
 )
 
@@ -152,6 +164,15 @@ type WebviewWindow struct {
 	pendingJS []string
 }
 
+// EmitEvent emits an event from the window
+func (w *WebviewWindow) EmitEvent(name string, data ...any) {
+	globalApplication.emitEvent(&CustomEvent{
+		Name:   name,
+		Data:   data,
+		Sender: w.Name(),
+	})
+}
+
 var windowID uint
 var windowIDLock sync.RWMutex
 
@@ -165,8 +186,8 @@ func getWindowID() uint {
 // FIXME: This should like be an interface method (TDM)
 // Use onApplicationEvent to register a callback for an application event from a window.
 // This will handle tidying up the callback when the window is destroyed
-func (w *WebviewWindow) onApplicationEvent(eventType events.ApplicationEventType, callback func(*Event)) {
-	cancelFn := globalApplication.On(eventType, callback)
+func (w *WebviewWindow) onApplicationEvent(eventType events.ApplicationEventType, callback func(*ApplicationEvent)) {
+	cancelFn := globalApplication.OnApplicationEvent(eventType, callback)
 	w.addCancellationFunction(cancelFn)
 }
 
@@ -194,7 +215,7 @@ func (w *WebviewWindow) setupEventMapping() {
 	for source, target := range mapping {
 		source := source
 		target := target
-		w.On(source, func(event *WindowEvent) {
+		w.OnWindowEvent(source, func(event *WindowEvent) {
 			w.emit(target)
 		})
 	}
@@ -212,6 +233,10 @@ func NewWindow(options WebviewWindowOptions) *WebviewWindow {
 		options.URL = "/"
 	}
 
+	if options.Name == "" {
+		options.Name = fmt.Sprintf("window-%d", getWindowID())
+	}
+
 	result := &WebviewWindow{
 		id:             getWindowID(),
 		options:        options,
@@ -224,7 +249,7 @@ func NewWindow(options WebviewWindowOptions) *WebviewWindow {
 	result.setupEventMapping()
 
 	// Listen for window closing events and de
-	result.On(events.Common.WindowClosing, func(event *WindowEvent) {
+	result.OnWindowEvent(events.Common.WindowClosing, func(event *WindowEvent) {
 		shouldClose := true
 		if result.options.ShouldClose != nil {
 			shouldClose = result.options.ShouldClose(result)
@@ -408,10 +433,11 @@ func (w *WebviewWindow) Hide() Window {
 }
 
 func (w *WebviewWindow) SetURL(s string) Window {
-	w.options.URL = s
+	url, _ := assetserver.GetStartURL(s)
+	w.options.URL = url
 	if w.impl != nil {
 		InvokeSync(func() {
-			w.impl.setURL(s)
+			w.impl.setURL(url)
 		})
 	}
 	return w
@@ -706,8 +732,8 @@ func (w *WebviewWindow) Center() {
 	InvokeSync(w.impl.center)
 }
 
-// On registers a callback for the given window event
-func (w *WebviewWindow) On(eventType events.WindowEventType, callback func(event *WindowEvent)) func() {
+// OnWindowEvent registers a callback for the given window event
+func (w *WebviewWindow) OnWindowEvent(eventType events.WindowEventType, callback func(event *WindowEvent)) func() {
 	eventID := uint(eventType)
 	w.eventListenersLock.Lock()
 	defer w.eventListenersLock.Unlock()
@@ -784,7 +810,73 @@ func (w *WebviewWindow) Height() int {
 	return InvokeSyncWithResult(w.impl.height)
 }
 
-// RelativePosition returns the relative position of the window to the screen
+// PhysicalBounds returns the physical bounds of the window
+func (w *WebviewWindow) PhysicalBounds() Rect {
+	if w.impl == nil && !w.isDestroyed() {
+		return Rect{}
+	}
+	var rect Rect
+	InvokeSync(func() {
+		rect = w.impl.physicalBounds()
+	})
+	return rect
+}
+
+// SetPhysicalBounds sets the physical bounds of the window
+func (w *WebviewWindow) SetPhysicalBounds(physicalBounds Rect) {
+	if w.impl == nil && !w.isDestroyed() {
+		return
+	}
+	InvokeSync(func() {
+		w.impl.setPhysicalBounds(physicalBounds)
+	})
+}
+
+// Bounds returns the DIP bounds of the window
+func (w *WebviewWindow) Bounds() Rect {
+	if w.impl == nil && !w.isDestroyed() {
+		return Rect{}
+	}
+	var rect Rect
+	InvokeSync(func() {
+		rect = w.impl.bounds()
+	})
+	return rect
+}
+
+// SetBounds sets the DIP bounds of the window
+func (w *WebviewWindow) SetBounds(bounds Rect) {
+	if w.impl == nil && !w.isDestroyed() {
+		return
+	}
+	InvokeSync(func() {
+		w.impl.setBounds(bounds)
+	})
+}
+
+// Position returns the absolute position of the window
+func (w *WebviewWindow) Position() (int, int) {
+	if w.impl == nil && !w.isDestroyed() {
+		return 0, 0
+	}
+	var x, y int
+	InvokeSync(func() {
+		x, y = w.impl.position()
+	})
+	return x, y
+}
+
+// SetPosition sets the absolute position of the window.
+func (w *WebviewWindow) SetPosition(x int, y int) {
+	if w.impl == nil && !w.isDestroyed() {
+		return
+	}
+	InvokeSync(func() {
+		w.impl.setPosition(x, y)
+	})
+}
+
+// RelativePosition returns the position of the window relative to the screen WorkArea on which it is
 func (w *WebviewWindow) RelativePosition() (int, int) {
 	if w.impl == nil && !w.isDestroyed() {
 		return 0, 0
@@ -796,16 +888,16 @@ func (w *WebviewWindow) RelativePosition() (int, int) {
 	return x, y
 }
 
-// Position returns the absolute position of the window to the screen
-func (w *WebviewWindow) Position() (int, int) {
-	if w.impl == nil && !w.isDestroyed() {
-		return 0, 0
+// SetRelativePosition sets the position of the window relative to the screen WorkArea on which it is.
+func (w *WebviewWindow) SetRelativePosition(x, y int) Window {
+	w.options.X = x
+	w.options.Y = y
+	if w.impl != nil {
+		InvokeSync(func() {
+			w.impl.setRelativePosition(x, y)
+		})
 	}
-	var x, y int
-	InvokeSync(func() {
-		x, y = w.impl.position()
-	})
-	return x, y
+	return w
 }
 
 func (w *WebviewWindow) Destroy() {
@@ -923,18 +1015,6 @@ func (w *WebviewWindow) SetHTML(html string) Window {
 	if w.impl != nil {
 		InvokeSync(func() {
 			w.impl.setHTML(html)
-		})
-	}
-	return w
-}
-
-// SetRelativePosition sets the position of the window.
-func (w *WebviewWindow) SetRelativePosition(x, y int) Window {
-	w.options.X = x
-	w.options.Y = y
-	if w.impl != nil {
-		InvokeSync(func() {
-			w.impl.setRelativePosition(x, y)
 		})
 	}
 	return w
@@ -1066,7 +1146,7 @@ func (w *WebviewWindow) SetFrameless(frameless bool) Window {
 	return w
 }
 
-func (w *WebviewWindow) DispatchWailsEvent(event *WailsEvent) {
+func (w *WebviewWindow) DispatchWailsEvent(event *CustomEvent) {
 	msg := fmt.Sprintf("_wails.dispatchWailsEvent(%s);", event.ToJSON())
 	w.ExecJS(msg)
 }
@@ -1074,7 +1154,7 @@ func (w *WebviewWindow) DispatchWailsEvent(event *WailsEvent) {
 func (w *WebviewWindow) dispatchWindowEvent(id uint) {
 	// TODO: Make this more efficient by keeping a list of which events have been registered
 	// and only dispatching those.
-	jsEvent := &WailsEvent{
+	jsEvent := &CustomEvent{
 		Name: events.JSEvent(id),
 	}
 	w.DispatchWailsEvent(jsEvent)
@@ -1173,16 +1253,6 @@ func (w *WebviewWindow) SetEnabled(enabled bool) {
 	})
 }
 
-func (w *WebviewWindow) SetPosition(x int, y int) {
-	// set absolute position
-	if w.impl == nil && !w.isDestroyed() {
-		return
-	}
-	InvokeSync(func() {
-		w.impl.setPosition(x, y)
-	})
-}
-
 func (w *WebviewWindow) processKeyBinding(acceleratorString string) bool {
 	// Check menu bindings
 	if w.menuBindings != nil {
@@ -1251,4 +1321,40 @@ func (w *WebviewWindow) SetIgnoreMouseEvents(ignore bool) Window {
 		w.impl.setIgnoreMouseEvents(ignore)
 	})
 	return w
+}
+
+func (w *WebviewWindow) cut() {
+	if w.impl == nil && !w.isDestroyed() {
+		w.impl.cut()
+	}
+}
+
+func (w *WebviewWindow) copy() {
+	if w.impl == nil && !w.isDestroyed() {
+		w.impl.copy()
+	}
+}
+
+func (w *WebviewWindow) paste() {
+	if w.impl == nil && !w.isDestroyed() {
+		w.impl.paste()
+	}
+}
+
+func (w *WebviewWindow) selectAll() {
+	if w.impl == nil && !w.isDestroyed() {
+		w.impl.selectAll()
+	}
+}
+
+func (w *WebviewWindow) undo() {
+	if w.impl == nil && !w.isDestroyed() {
+		w.impl.undo()
+	}
+}
+
+func (w *WebviewWindow) delete() {
+	if w.impl == nil && !w.isDestroyed() {
+		w.impl.delete()
+	}
 }

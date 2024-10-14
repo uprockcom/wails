@@ -1240,7 +1240,7 @@ func (w *macosWebviewWindow) run() {
 		w.setURL(startURL)
 
 		// We need to wait for the HTML to load before we can execute the javascript
-		w.parent.On(events.Mac.WebViewDidFinishNavigation, func(_ *WindowEvent) {
+		w.parent.OnWindowEvent(events.Mac.WebViewDidFinishNavigation, func(_ *WindowEvent) {
 			InvokeAsync(func() {
 				if options.JS != "" {
 					w.execJS(options.JS)
@@ -1254,7 +1254,7 @@ func (w *macosWebviewWindow) run() {
 				} else {
 					// We have to wait until the window is shown before we can remove the shadow
 					var cancel func()
-					cancel = w.parent.On(events.Mac.WindowDidBecomeKey, func(_ *WindowEvent) {
+					cancel = w.parent.OnWindowEvent(events.Mac.WindowDidBecomeKey, func(_ *WindowEvent) {
 						w.setHasShadow(!options.Mac.DisableShadow)
 						cancel()
 					})
@@ -1263,18 +1263,18 @@ func (w *macosWebviewWindow) run() {
 		})
 
 		// Translate ShouldClose to common WindowClosing event
-		w.parent.On(events.Mac.WindowShouldClose, func(_ *WindowEvent) {
+		w.parent.OnWindowEvent(events.Mac.WindowShouldClose, func(_ *WindowEvent) {
 			w.parent.emit(events.Common.WindowClosing)
 		})
 
 		// Translate WindowDidResignKey to common WindowLostFocus event
-		w.parent.On(events.Mac.WindowDidResignKey, func(_ *WindowEvent) {
+		w.parent.OnWindowEvent(events.Mac.WindowDidResignKey, func(_ *WindowEvent) {
 			w.parent.emit(events.Common.WindowLostFocus)
 		})
-		w.parent.On(events.Mac.WindowDidResignMain, func(_ *WindowEvent) {
+		w.parent.OnWindowEvent(events.Mac.WindowDidResignMain, func(_ *WindowEvent) {
 			w.parent.emit(events.Common.WindowLostFocus)
 		})
-		w.parent.On(events.Mac.WindowDidResize, func(_ *WindowEvent) {
+		w.parent.OnWindowEvent(events.Mac.WindowDidResize, func(_ *WindowEvent) {
 			w.parent.emit(events.Common.WindowDidResize)
 		})
 
@@ -1312,6 +1312,38 @@ func (w *macosWebviewWindow) position() (int, int) {
 	return int(x), int(y)
 }
 
+func (w *macosWebviewWindow) bounds() Rect {
+	// DOTO: do it in a single step + proper DPI scaling
+	var x, y, width, height C.int
+	InvokeSync(func() {
+		C.windowGetPosition(w.nsWindow, &x, &y)
+		C.windowGetSize(w.nsWindow, &width, &height)
+	})
+
+	return Rect{
+		X:      int(x),
+		Y:      int(y),
+		Width:  int(width),
+		Height: int(height),
+	}
+}
+
+func (w *macosWebviewWindow) setBounds(bounds Rect) {
+	// DOTO: do it in a single step + proper DPI scaling
+	C.windowSetPosition(w.nsWindow, C.int(bounds.X), C.int(bounds.Y))
+	C.windowSetSize(w.nsWindow, C.int(bounds.Width), C.int(bounds.Height))
+}
+
+func (w *macosWebviewWindow) physicalBounds() Rect {
+	// TODO: proper DPI scaling
+	return w.bounds()
+}
+
+func (w *macosWebviewWindow) setPhysicalBounds(physicalBounds Rect) {
+	// TODO: proper DPI scaling
+	w.setBounds(physicalBounds)
+}
+
 func (w *macosWebviewWindow) destroy() {
 	w.parent.markAsDestroyed()
 	C.windowDestroy(w.nsWindow)
@@ -1347,4 +1379,25 @@ func (w *macosWebviewWindow) isIgnoreMouseEvents() bool {
 
 func (w *macosWebviewWindow) setIgnoreMouseEvents(ignore bool) {
 	C.setIgnoreMouseEvents(w.nsWindow, C.bool(ignore))
+}
+
+func (w *macosWebviewWindow) cut() {
+}
+
+func (w *macosWebviewWindow) paste() {
+}
+
+func (w *macosWebviewWindow) copy() {
+}
+
+func (w *macosWebviewWindow) selectAll() {
+}
+
+func (w *macosWebviewWindow) undo() {
+}
+
+func (w *macosWebviewWindow) delete() {
+}
+
+func (w *macosWebviewWindow) redo() {
 }

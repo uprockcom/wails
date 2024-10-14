@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/wailsapp/wails/v3/internal/assetserver/webview"
@@ -145,7 +146,7 @@ typedef struct Screen {
 	int w_height;
 	int w_x;
 	int w_y;
-	float scale;
+	float scaleFactor;
 	double rotation;
 	bool isPrimary;
 } Screen;
@@ -744,17 +745,35 @@ func getScreenByIndex(display *C.struct__GdkDisplay, index int) *Screen {
 	}
 	name := C.gdk_monitor_get_model(monitor)
 	return &Screen{
-		ID:        fmt.Sprintf("%d", index),
-		Name:      C.GoString(name),
-		IsPrimary: primary,
-		Scale:     float32(C.gdk_monitor_get_scale_factor(monitor)),
-		X:         int(geometry.x),
-		Y:         int(geometry.y),
+		ID:          fmt.Sprintf("%d", index),
+		Name:        C.GoString(name),
+		IsPrimary:   primary,
+		ScaleFactor: float32(C.gdk_monitor_get_scale_factor(monitor)),
+		X:           int(geometry.x),
+		Y:           int(geometry.y),
 		Size: Size{
 			Height: int(geometry.height),
 			Width:  int(geometry.width),
 		},
 		Bounds: Rect{
+			X:      int(geometry.x),
+			Y:      int(geometry.y),
+			Height: int(geometry.height),
+			Width:  int(geometry.width),
+		},
+		PhysicalBounds: Rect{
+			X:      int(geometry.x),
+			Y:      int(geometry.y),
+			Height: int(geometry.height),
+			Width:  int(geometry.width),
+		},
+		WorkArea: Rect{
+			X:      int(geometry.x),
+			Y:      int(geometry.y),
+			Height: int(geometry.height),
+			Width:  int(geometry.width),
+		},
+		PhysicalWorkArea: Rect{
 			X:      int(geometry.x),
 			Y:      int(geometry.y),
 			Height: int(geometry.height),
@@ -829,18 +848,18 @@ func getMousePosition() (int, int, *Screen) {
 	monitor := C.gdk_display_get_monitor_at_point(defaultDisplay, x, y)
 	geometry := C.GdkRectangle{}
 	C.gdk_monitor_get_geometry(monitor, &geometry)
-	scale := int(C.gdk_monitor_get_scale_factor(monitor))
+	scaleFactor := int(C.gdk_monitor_get_scale_factor(monitor))
 	return int(x), int(y), &Screen{
-		ID:        fmt.Sprintf("%d", 0),                                           // A unique identifier for the display
-		Name:      C.GoString(C.gdk_monitor_get_model(monitor)),                   // The name of the display
-		Scale:     float32(scale),                                                 // The scale factor of the display
-		X:         int(geometry.x),                                                // The x-coordinate of the top-left corner of the rectangle
-		Y:         int(geometry.y),                                                // The y-coordinate of the top-left corner of the rectangle
-		Size:      Size{Width: int(geometry.width), Height: int(geometry.height)}, // The size of the display
-		Bounds:    Rect{},                                                         // The bounds of the display
-		WorkArea:  Rect{},                                                         // The work area of the display
-		IsPrimary: false,                                                          // Whether this is the primary display
-		Rotation:  0.0,                                                            // The rotation of the display
+		ID:          fmt.Sprintf("%d", 0),                                           // A unique identifier for the display
+		Name:        C.GoString(C.gdk_monitor_get_model(monitor)),                   // The name of the display
+		ScaleFactor: float32(scaleFactor),                                           // The scale factor of the display
+		X:           int(geometry.x),                                                // The x-coordinate of the top-left corner of the rectangle
+		Y:           int(geometry.y),                                                // The y-coordinate of the top-left corner of the rectangle
+		Size:        Size{Width: int(geometry.width), Height: int(geometry.height)}, // The size of the display
+		Bounds:      Rect{},                                                         // The bounds of the display
+		WorkArea:    Rect{},                                                         // The work area of the display
+		IsPrimary:   false,                                                          // Whether this is the primary display
+		Rotation:    0.0,                                                            // The rotation of the display
 	}
 }
 
@@ -858,12 +877,12 @@ func (w *linuxWebviewWindow) destroy() {
 func (w *linuxWebviewWindow) fullscreen() {
 	w.maximise()
 	//w.lastWidth, w.lastHeight = w.size()
-	x, y, width, height, scale := w.getCurrentMonitorGeometry()
+	x, y, width, height, scaleFactor := w.getCurrentMonitorGeometry()
 	if x == -1 && y == -1 && width == -1 && height == -1 {
 		return
 	}
-	w.setMinMaxSize(0, 0, width*scale, height*scale)
-	w.setSize(width*scale, height*scale)
+	w.setMinMaxSize(0, 0, width*scaleFactor, height*scaleFactor)
+	w.setSize(width*scaleFactor, height*scaleFactor)
 	C.gtk_window_fullscreen(w.gtkWindow())
 	w.setRelativePosition(0, 0)
 }
@@ -882,30 +901,30 @@ func (w *linuxWebviewWindow) getScreen() (*Screen, error) {
 	// Get the current screen for the window
 	monitor := w.getCurrentMonitor()
 	name := C.gdk_monitor_get_model(monitor)
-	mx, my, width, height, scale := w.getCurrentMonitorGeometry()
+	mx, my, width, height, scaleFactor := w.getCurrentMonitorGeometry()
 	return &Screen{
-		ID:        fmt.Sprintf("%d", w.id),            // A unique identifier for the display
-		Name:      C.GoString(name),                   // The name of the display
-		Scale:     float32(scale),                     // The scale factor of the display
-		X:         mx,                                 // The x-coordinate of the top-left corner of the rectangle
-		Y:         my,                                 // The y-coordinate of the top-left corner of the rectangle
-		Size:      Size{Width: width, Height: height}, // The size of the display
-		Bounds:    Rect{},                             // The bounds of the display
-		WorkArea:  Rect{},                             // The work area of the display
-		IsPrimary: false,                              // Whether this is the primary display
-		Rotation:  0.0,                                // The rotation of the display
+		ID:          fmt.Sprintf("%d", w.id),            // A unique identifier for the display
+		Name:        C.GoString(name),                   // The name of the display
+		ScaleFactor: float32(scaleFactor),               // The scale factor of the display
+		X:           mx,                                 // The x-coordinate of the top-left corner of the rectangle
+		Y:           my,                                 // The y-coordinate of the top-left corner of the rectangle
+		Size:        Size{Width: width, Height: height}, // The size of the display
+		Bounds:      Rect{},                             // The bounds of the display
+		WorkArea:    Rect{},                             // The work area of the display
+		IsPrimary:   false,                              // Whether this is the primary display
+		Rotation:    0.0,                                // The rotation of the display
 	}, nil
 }
 
-func (w *linuxWebviewWindow) getCurrentMonitorGeometry() (x int, y int, width int, height int, scale int) {
+func (w *linuxWebviewWindow) getCurrentMonitorGeometry() (x int, y int, width int, height int, scaleFactor int) {
 	monitor := w.getCurrentMonitor()
 	if monitor == nil {
 		return -1, -1, -1, -1, 1
 	}
 	var result C.GdkRectangle
 	C.gdk_monitor_get_geometry(monitor, &result)
-	scale = int(C.gdk_monitor_get_scale_factor(monitor))
-	return int(result.x), int(result.y), int(result.width), int(result.height), scale
+	scaleFactor = int(C.gdk_monitor_get_scale_factor(monitor))
+	return int(result.x), int(result.y), int(result.width), int(result.height), scaleFactor
 }
 
 func (w *linuxWebviewWindow) size() (int, int) {
@@ -1101,7 +1120,7 @@ func getPrimaryScreen() (*Screen, error) {
 	monitor := C.gdk_display_get_primary_monitor(display)
 	geometry := C.GdkRectangle{}
 	C.gdk_monitor_get_geometry(monitor, &geometry)
-	scale := int(C.gdk_monitor_get_scale_factor(monitor))
+	scaleFactor := int(C.gdk_monitor_get_scale_factor(monitor))
 	// get the name for the screen
 	name := C.gdk_monitor_get_model(monitor)
 	return &Screen{
@@ -1120,7 +1139,7 @@ func getPrimaryScreen() (*Screen, error) {
 			Height: int(geometry.height),
 			Width:  int(geometry.width),
 		},
-		Scale: float32(scale),
+		ScaleFactor: float32(scaleFactor),
 	}, nil
 }
 
@@ -1373,6 +1392,14 @@ func (w *linuxWebviewWindow) position() (int, int) {
 	return int(x), int(y)
 }
 
+func (w *linuxWebviewWindow) ignoreMouse(ignore bool) {
+	if ignore {
+		C.gtk_widget_set_events((*C.GtkWidget)(unsafe.Pointer(w.window)), C.GDK_ENTER_NOTIFY_MASK|C.GDK_LEAVE_NOTIFY_MASK)
+	} else {
+		C.gtk_widget_set_events((*C.GtkWidget)(unsafe.Pointer(w.window)), C.GDK_ALL_EVENTS_MASK)
+	}
+}
+
 // FIXME Change this to reflect mouse button!
 //
 //export onButtonEvent
@@ -1454,8 +1481,22 @@ func onUriList(extracted **C.char, data unsafe.Pointer) {
 	}
 }
 
+var debounceTimer *time.Timer 
+var isDebouncing bool = false
 //export onKeyPressEvent
-func onKeyPressEvent(widget *C.GtkWidget, event *C.GdkEventKey, userData C.uintptr_t) C.gboolean {
+func onKeyPressEvent(_ *C.GtkWidget, event *C.GdkEventKey, userData C.uintptr_t) C.gboolean {
+	// Keypress re-emits if the key is pressed over a certain threshold so we need a debounce
+	if isDebouncing {
+		debounceTimer.Reset(50 * time.Millisecond)
+		return C.gboolean(0)
+	}
+
+	// Start the debounce
+	isDebouncing = true
+	debounceTimer = time.AfterFunc(50*time.Millisecond, func() {
+		isDebouncing = false
+	})
+
 	windowID := uint(C.uint(userData))
 	if accelerator, ok := getKeyboardState(event); ok {
 		windowKeyEvents <- &windowKeyEvent{
@@ -1756,4 +1797,30 @@ func runSaveFileDialog(dialog *SaveFileDialogStruct) (chan string, error) {
 		dialog.filters)
 
 	return results, err
+}
+
+func (w *linuxWebviewWindow) cut() {
+	//C.webkit_web_view_execute_editing_command(w.webview, C.WEBKIT_EDITING_COMMAND_CUT)
+}
+
+func (w *linuxWebviewWindow) paste() {
+	//C.webkit_web_view_execute_editing_command(w.webview, C.WEBKIT_EDITING_COMMAND_PASTE)
+}
+
+func (w *linuxWebviewWindow) copy() {
+	//C.webkit_web_view_execute_editing_command(w.webview, C.WEBKIT_EDITING_COMMAND_COPY)
+}
+
+func (w *linuxWebviewWindow) selectAll() {
+	//C.webkit_web_view_execute_editing_command(w.webview, C.WEBKIT_EDITING_COMMAND_SELECT_ALL)
+}
+
+func (w *linuxWebviewWindow) undo() {
+	//C.webkit_web_view_execute_editing_command(w.webview, C.WEBKIT_EDITING_COMMAND_UNDO)
+}
+
+func (w *linuxWebviewWindow) redo() {
+}
+
+func (w *linuxWebviewWindow) delete() {
 }
