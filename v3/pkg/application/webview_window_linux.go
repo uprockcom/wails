@@ -2,16 +2,10 @@
 
 package application
 
-/*
-#cgo linux pkg-config: gtk+-3.0
-
-#include "gtk/gtk.h"
-*/
 import "C"
 import (
 	"fmt"
 	"time"
-	"unsafe"
 
 	"github.com/bep/debounce"
 	"github.com/wailsapp/wails/v3/internal/assetserver"
@@ -288,7 +282,7 @@ func (w *linuxWebviewWindow) run() {
 	}
 
 	// Ignore mouse events if requested
-	w.setIgnoreMouseEvents(w.parent.options.IgnoreMouseEvents)
+	w.setIgnoreMouseEvents(options.IgnoreMouseEvents)
 
 	startURL, err := assetserver.GetStartURL(w.parent.options.URL)
 	if err != nil {
