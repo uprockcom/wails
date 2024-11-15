@@ -1165,7 +1165,6 @@ func (w *macosWebviewWindow) run() {
 			w.getWebviewPreferences(),
 		)
 		w.setTitle(options.Title)
-		w.setAlwaysOnTop(options.AlwaysOnTop)
 		w.setResizable(!options.DisableResize)
 		if options.MinWidth != 0 || options.MinHeight != 0 {
 			w.setMinSize(options.MinWidth, options.MinHeight)
@@ -1249,13 +1248,15 @@ func (w *macosWebviewWindow) run() {
 					C.windowInjectCSS(w.nsWindow, C.CString(options.CSS))
 				}
 				if !options.Hidden {
-					C.windowShow(w.nsWindow)
+					w.parent.Show()
 					w.setHasShadow(!options.Mac.DisableShadow)
+					w.setAlwaysOnTop(options.AlwaysOnTop)
 				} else {
 					// We have to wait until the window is shown before we can remove the shadow
 					var cancel func()
 					cancel = w.parent.OnWindowEvent(events.Mac.WindowDidBecomeKey, func(_ *WindowEvent) {
 						w.setHasShadow(!options.Mac.DisableShadow)
+						w.setAlwaysOnTop(options.AlwaysOnTop)
 						cancel()
 					})
 				}
