@@ -59,8 +59,8 @@ func (p *Plugin) Name() string {
 // instance via the app property.
 func (p *Plugin) OnStartup(ctx context.Context, options application.ServiceOptions) error {
 	var err error
-	lockfileName := p.config.LockFilePath + "/" + p.config.LockFileName
-	p.lockfile, err = CreateLockFile(lockfileName, application.Get().GetPID())
+	lockfileName := filepath.Join(p.config.LockFilePath, p.config.LockFileName)
+	p.lockfile, err = CreateLockFile(lockfileName, os.Getpid())
 	if err != nil {
 		if p.config.ActivateAppOnSubsequentLaunch {
 			pid, err := GetLockFilePid(lockfileName)
