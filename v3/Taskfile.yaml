@@ -17,8 +17,8 @@ includes:
     optional: true
 
   docs:
-    taskfile: ../mkdocs-website
-    dir: ../mkdocs-website
+    taskfile: ../docs
+    dir: ../docs
     optional: true
 
 tasks:
@@ -30,8 +30,9 @@ tasks:
       - rm -rf {{.TEMPLATE_DIR}}
       - mkdir -p {{.TEMPLATE_DIR}}
 
-  cli:install:
+  install:
     dir: cmd/wails3
+    silent: true
     cmds:
       - go install
       - echo "Installed wails CLI"
@@ -67,8 +68,9 @@ tasks:
       - go get -u github.com/go-task/task/v3
 
   reinstall-cli:
-    dir: cmd/wails
+    dir: cmd/wails3
     internal: true
+    silent: true
     cmds:
       - go install
       - echo "Reinstalled wails CLI"
@@ -127,15 +129,6 @@ tasks:
       - task: reinstall-cli
       - echo "Generated templates"
 
-  format:md:
-    dir: ../mkdocs-website
-    cmds:
-      - npx prettier --write "**/*.md"
-
-  format:
-    cmds:
-      - task: format:md
-
   precommit:
     cmds:
       - go test ./...
@@ -175,6 +168,7 @@ tasks:
         clipboard
         contextmenus
         dialogs
+        dialogs-basic
         drag-n-drop
         environment
         events
@@ -188,7 +182,9 @@ tasks:
         screen
         services
         show-macos-toolbar
-        systray
+        systray-basic
+        systray-menu
+        systray-custom
         video
         window
         window-api
