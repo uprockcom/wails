@@ -159,6 +159,12 @@ func newWindowImpl(parent *WebviewWindow) *linuxWebviewWindow {
 func (w *linuxWebviewWindow) setMinMaxSize(minWidth, minHeight, maxWidth, maxHeight int) {
 	// Get current screen for window
 	_, _, monitorwidth, monitorheight, _ := w.getCurrentMonitorGeometry()
+	if monitorwidth == -1 {
+		monitorwidth = 1920
+	}
+	if monitorheight == -1 {
+		monitorheight = 1080
+	}
 	if maxWidth == 0 {
 		maxWidth = monitorwidth
 	}
@@ -277,18 +283,21 @@ func (w *linuxWebviewWindow) run() {
 	w.setIcon(app.icon)
 	w.setAlwaysOnTop(w.parent.options.AlwaysOnTop)
 	w.setResizable(!w.parent.options.DisableResize)
-	// only set min/max size if actually set
-	if w.parent.options.MinWidth != 0 &&
-		w.parent.options.MinHeight != 0 &&
-		w.parent.options.MaxWidth != 0 &&
-		w.parent.options.MaxHeight != 0 {
-		w.setMinMaxSize(
-			w.parent.options.MinWidth,
-			w.parent.options.MinHeight,
-			w.parent.options.MaxWidth,
-			w.parent.options.MaxHeight,
-		)
+	// Set min/max size with defaults
+	// Default min: 1x1 (smallest possible)
+	// Default max: 0x0 (uses screen size)
+	minWidth := w.parent.options.MinWidth
+	if minWidth == 0 {
+		minWidth = 1
 	}
+	minHeight := w.parent.options.MinHeight
+	if minHeight == 0 {
+		minHeight = 1
+	}
+	maxWidth := w.parent.options.MaxWidth
+	maxHeight := w.parent.options.MaxHeight
+
+	w.setMinMaxSize(minWidth, minHeight, maxWidth, maxHeight)
 	w.setDefaultSize(w.parent.options.Width, w.parent.options.Height)
 	w.setSize(w.parent.options.Width, w.parent.options.Height)
 	w.setZoom(w.parent.options.Zoom)
@@ -334,21 +343,6 @@ func (w *linuxWebviewWindow) run() {
 				w.execJS(js)
 			}
 		})
-	})
-	w.parent.OnWindowEvent(events.Linux.WindowFocusIn, func(e *WindowEvent) {
-		w.parent.emit(events.Common.WindowFocus)
-	})
-	w.parent.OnWindowEvent(events.Linux.WindowFocusOut, func(e *WindowEvent) {
-		w.parent.emit(events.Common.WindowLostFocus)
-	})
-	w.parent.OnWindowEvent(events.Linux.WindowDeleteEvent, func(e *WindowEvent) {
-		w.parent.emit(events.Common.WindowClosing)
-	})
-	w.parent.OnWindowEvent(events.Linux.WindowDidMove, func(e *WindowEvent) {
-		w.parent.emit(events.Common.WindowDidMove)
-	})
-	w.parent.OnWindowEvent(events.Linux.WindowDidResize, func(e *WindowEvent) {
-		w.parent.emit(events.Common.WindowDidResize)
 	})
 
 	w.parent.RegisterHook(events.Linux.WindowLoadChanged, func(e *WindowEvent) {
@@ -413,3 +407,7 @@ func (w *linuxWebviewWindow) isIgnoreMouseEvents() bool {
 func (w *linuxWebviewWindow) setIgnoreMouseEvents(ignore bool) {
 	w.ignoreMouse(w.ignoreMouseEvents)
 }
+
+func (w *linuxWebviewWindow) showMenuBar()   {}
+func (w *linuxWebviewWindow) hideMenuBar()   {}
+func (w *linuxWebviewWindow) toggleMenuBar() {}

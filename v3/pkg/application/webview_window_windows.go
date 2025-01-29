@@ -74,30 +74,98 @@ type windowsWebviewWindow struct {
 }
 
 func (w *windowsWebviewWindow) cut() {
-	w32.Cut(w.hwnd)
+	w.execJS("document.execCommand('cut')")
 }
 
 func (w *windowsWebviewWindow) paste() {
-	w32.Paste(w.hwnd)
+	w.execJS(`
+		(async () => {
+			try {
+				// Try to read all available formats
+				const clipboardItems = await navigator.clipboard.read();
+				
+				for (const clipboardItem of clipboardItems) {
+					// Check for image types
+					for (const type of clipboardItem.types) {
+						if (type.startsWith('image/')) {
+							const blob = await clipboardItem.getType(type);
+							const url = URL.createObjectURL(blob);
+							document.execCommand('insertHTML', false, '<img src="' + url + '">');
+							return;
+						}
+					}
+					
+					// If no image found, try text
+					if (clipboardItem.types.includes('text/plain')) {
+						const text = await navigator.clipboard.readText();
+						document.execCommand('insertText', false, text);
+						return;
+					}
+				}
+			} catch(err) {
+				// Fallback to text-only paste if clipboard access fails
+				try {
+					const text = await navigator.clipboard.readText();
+					document.execCommand('insertText', false, text);
+				} catch(fallbackErr) {
+					console.error('Failed to paste:', err, fallbackErr);
+				}
+			}
+		})()
+	`)
 }
 
 func (w *windowsWebviewWindow) copy() {
-	w32.Copy(w.hwnd)
+	w.execJS(`
+		(async () => {
+			try {
+				const selection = window.getSelection();
+				if (!selection.rangeCount) return;
+
+				const range = selection.getRangeAt(0);
+				const container = document.createElement('div');
+				container.appendChild(range.cloneContents());
+
+				// Check if we have any images in the selection
+				const images = container.getElementsByTagName('img');
+				if (images.length > 0) {
+					// Handle image copy
+					const img = images[0]; // Take the first image
+					const response = await fetch(img.src);
+					const blob = await response.blob();
+					await navigator.clipboard.write([
+						new ClipboardItem({
+							[blob.type]: blob
+						})
+					]);
+				} else {
+					// Handle text copy
+					const text = selection.toString();
+					if (text) {
+						await navigator.clipboard.writeText(text);
+					}
+				}
+			} catch(err) {
+				console.error('Failed to copy:', err);
+			}
+		})()
+	`)
 }
 
 func (w *windowsWebviewWindow) selectAll() {
-	w32.SelectAll(w.hwnd)
+	w.execJS("document.execCommand('selectAll')")
 }
 
 func (w *windowsWebviewWindow) undo() {
-	w32.Undo(w.hwnd)
-}
-
-func (w *windowsWebviewWindow) delete() {
-	w32.Delete(w.hwnd)
+	w.execJS("document.execCommand('undo')")
 }
 
 func (w *windowsWebviewWindow) redo() {
+	w.execJS("document.execCommand('redo')")
+}
+
+func (w *windowsWebviewWindow) delete() {
+	w.execJS("document.execCommand('delete')")
 }
 
 func (w *windowsWebviewWindow) handleKeyEvent(_ string) {
@@ -1101,9 +1169,36 @@ func (w *windowsWebviewWindow) WndProc(msg uint32, wparam, lparam uintptr) uintp
 		w.parent.emit(events.Windows.WindowBackgroundErase)
 		return 1 // Let WebView2 handle background erasing
 	// Check for keypress
-	case w32.WM_KEYDOWN:
-		w.processKeyBinding(uint(wparam))
+	case w32.WM_SYSCOMMAND:
+		switch wparam {
+		case w32.SC_KEYMENU:
+			if lparam == 0 {
+				// F10 or plain Alt key
+				if w.processKeyBinding(w32.VK_F10) {
+					return 0
+				}
+			} else {
+				// Alt + key combination
+				// The character code is in the low word of lparam
+				char := byte(lparam & 0xFF)
+				// Convert ASCII to virtual key code if needed
+				vkey := w32.VkKeyScan(uint16(char))
+				if w.processKeyBinding(uint(vkey)) {
+					return 0
+				}
+			}
+		}
+	case w32.WM_SYSKEYDOWN:
+		globalApplication.info("w32.WM_SYSKEYDOWN: %v", uint(wparam))
 		w.parent.emit(events.Windows.WindowKeyDown)
+		if w.processKeyBinding(uint(wparam)) {
+			return 0
+		}
+	case w32.WM_SYSKEYUP:
+		w.parent.emit(events.Windows.WindowKeyUp)
+	case w32.WM_KEYDOWN:
+		w.parent.emit(events.Windows.WindowKeyDown)
+		w.processKeyBinding(uint(wparam))
 	case w32.WM_KEYUP:
 		w.parent.emit(events.Windows.WindowKeyUp)
 	case w32.WM_SIZE:
@@ -1196,7 +1291,7 @@ func (w *windowsWebviewWindow) WndProc(msg uint32, wparam, lparam uintptr) uintp
 				int(newWindowRect.Bottom-newWindowRect.Top),
 				w32.SWP_NOZORDER|w32.SWP_NOACTIVATE)
 		}
-		w.parent.emit(events.Common.WindowDPIChanged)
+		w.parent.emit(events.Windows.WindowDPIChanged)
 	}
 
 	if w.parent.options.Windows.WindowMask != nil {
@@ -1849,6 +1944,43 @@ func (w *windowsWebviewWindow) setMinimiseButtonEnabled(enabled bool) {
 	w.setStyle(enabled, w32.WS_MINIMIZEBOX)
 }
 
+func (w *windowsWebviewWindow) toggleMenuBar() {
+	if w.menu != nil {
+		if w32.GetMenu(w.hwnd) == 0 {
+			w32.SetMenu(w.hwnd, w.menu.menu)
+		} else {
+			w32.SetMenu(w.hwnd, 0)
+		}
+
+		// Get the bounds of the client area
+		//bounds := w32.GetClientRect(w.hwnd)
+
+		// Resize the webview
+		w.chromium.Resize()
+
+		// Update size of webview
+		w.update()
+		// Restore focus to the webview after toggling menu
+		w.focus()
+	}
+}
+
+func (w *windowsWebviewWindow) enableRedraw() {
+	w32.SendMessage(w.hwnd, w32.WM_SETREDRAW, 1, 0)
+	w32.RedrawWindow(w.hwnd, nil, 0, w32.RDW_ERASE|w32.RDW_FRAME|w32.RDW_INVALIDATE|w32.RDW_ALLCHILDREN)
+}
+
+func (w *windowsWebviewWindow) disableRedraw() {
+	w32.SendMessage(w.hwnd, w32.WM_SETREDRAW, 0, 0)
+}
+
+func (w *windowsWebviewWindow) disableRedrawWithCallback(callback func()) {
+	w.disableRedraw()
+	callback()
+	w.enableRedraw()
+
+}
+
 func NewIconFromResource(instance w32.HINSTANCE, resId uint16) (w32.HICON, error) {
 	var err error
 	var result w32.HICON
@@ -1917,4 +2049,16 @@ func (w *windowsWebviewWindow) setPadding(padding edge.Rect) {
 		return
 	}
 	w.chromium.SetPadding(padding)
+}
+
+func (w *windowsWebviewWindow) showMenuBar() {
+	if w.menu != nil {
+		w32.SetMenu(w.hwnd, w.menu.menu)
+	}
+}
+
+func (w *windowsWebviewWindow) hideMenuBar() {
+	if w.menu != nil {
+		w32.SetMenu(w.hwnd, 0)
+	}
 }

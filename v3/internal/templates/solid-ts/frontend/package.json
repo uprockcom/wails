@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build:dev": "tsc && vite build --minify false --mode development",
+    "build": "tsc && vite build --mode production",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -13,7 +14,7 @@
   },
   "devDependencies": {
     "typescript": "^5.2.2",
-    "vite": "^5.0.8",
+    "vite": "^6.0.0",
     "vite-plugin-solid": "^2.8.0",
     "@wailsio/runtime": "latest"
   }

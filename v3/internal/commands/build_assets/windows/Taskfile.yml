@@ -9,6 +9,11 @@ tasks:
     deps:
       - task: common:go:mod:tidy
       - task: common:build:frontend
+        vars:
+          BUILD_FLAGS:
+            ref: .BUILD_FLAGS
+          PRODUCTION:
+            ref: .PRODUCTION
       - task: common:generate:icons
     cmds:
       - task: generate:syso
@@ -18,7 +23,7 @@ tasks:
       - cmd: rm -f *.syso
         platforms: [linux, darwin]
     vars:
-      BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production -trimpath -ldflags="-w -s -H windowsgui"{{else}}-gcflags=all="-l"{{end}}'
+      BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui"{{else}}-buildvcs=false -gcflags=all="-l"{{end}}'
     env:
       GOOS: windows
       CGO_ENABLED: 0
@@ -47,7 +52,7 @@ tasks:
           PRODUCTION: "true"
     cmds:
       # Create the Microsoft WebView2 bootstrapper if it doesn't exist
-      - wails3 generate webview2bootstrapper -dir {{.ROOT_DIR}}/build/windows/nsis
+      - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}\build\windows\nsis"
       - makensis -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
     vars:
       ARCH: '{{.ARCH | default ARCH}}'

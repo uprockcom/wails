@@ -2,24 +2,18 @@ package term
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/pterm/pterm"
 	"github.com/wailsapp/wails/v3/internal/generator/config"
 	"github.com/wailsapp/wails/v3/internal/version"
 	"golang.org/x/term"
-	"os"
 )
 
 func Header(header string) {
 	// Print Wails with the current version in white on red background with the header in white with a green background
 	pterm.BgLightRed.Print(pterm.LightWhite(" Wails (" + version.String() + ") "))
 	pterm.BgLightGreen.Println(pterm.LightWhite(" " + header + " "))
-}
-
-func Infof(format string, args ...interface{}) {
-	pterm.Info.Printf(format, args...)
-}
-func Infofln(format string, args ...interface{}) {
-	pterm.Info.Printfln(format, args...)
 }
 
 func IsTerminal() bool {
@@ -30,37 +24,32 @@ type Spinner struct {
 	spinner *pterm.SpinnerPrinter
 }
 
-func (s *Spinner) Logger() config.Logger {
-	if s == nil {
-		return nil
-	}
+func (s Spinner) Logger() config.Logger {
 	return config.DefaultPtermLogger(s.spinner)
 }
 
-func StartSpinner(text string) *Spinner {
+func StartSpinner(text string) Spinner {
 	if !IsTerminal() {
-		return nil
+		return Spinner{}
 	}
-	spin, err := pterm.DefaultSpinner.Start(text)
+	spinner, err := pterm.DefaultSpinner.Start(text)
 	if err != nil {
-		return nil
+		return Spinner{}
 	}
-	return &Spinner{
-		spinner: spin,
-	}
+	spinner.RemoveWhenDone = true
+	return Spinner{spinner}
 }
 
-func StopSpinner(s *Spinner) {
-	if s == nil {
-		return
+func StopSpinner(s Spinner) {
+	if s.spinner != nil {
+		_ = s.spinner.Stop()
 	}
-	_ = s.spinner.Stop()
 }
 
 func output(input any, printer pterm.PrefixPrinter, args ...any) {
 	switch v := input.(type) {
 	case string:
-		printer.Println(fmt.Sprintf(input.(string), args...))
+		printer.Printfln(input.(string), args...)
 	case error:
 		printer.Println(v.Error())
 	default:
@@ -68,12 +57,20 @@ func output(input any, printer pterm.PrefixPrinter, args ...any) {
 	}
 }
 
+func Info(input any) {
+	output(input, pterm.Info)
+}
+
+func Infof(input any, args ...interface{}) {
+	output(input, pterm.Info, args...)
+}
+
 func Warning(input any) {
 	output(input, pterm.Warning)
 }
 
 func Warningf(input any, args ...any) {
-	output(input, pterm.Warning, args)
+	output(input, pterm.Warning, args...)
 }
 
 func Error(input any) {
@@ -92,6 +89,7 @@ func Section(s string) {
 func DisableColor() {
 	pterm.DisableColor()
 }
+
 func EnableOutput() {
 	pterm.EnableOutput()
 }
@@ -100,6 +98,30 @@ func DisableOutput() {
 	pterm.DisableOutput()
 }
 
+func EnableDebug() {
+	pterm.EnableDebugMessages()
+}
+
+func DisableDebug() {
+	pterm.DisableDebugMessages()
+}
+
 func Println(s string) {
 	pterm.Println(s)
+}
+
+func Hyperlink(url, text string) string {
+	// OSC 8 sequence to start a clickable link
+	linkStart := "\x1b]8;;"
+
+	// OSC 8 sequence to end a clickable link
+	linkEnd := "\x1b]8;;\x1b\\"
+
+	// ANSI escape code for underline
+	underlineStart := "\x1b[4m"
+
+	// ANSI escape code to reset text formatting
+	resetFormat := "\x1b[0m"
+
+	return fmt.Sprintf("%s%s%s%s%s%s%s", linkStart, url, "\x1b\\", underlineStart, text, resetFormat, linkEnd)
 }

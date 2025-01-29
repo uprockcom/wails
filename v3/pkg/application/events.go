@@ -11,7 +11,8 @@ import (
 type ApplicationEvent struct {
 	Id        uint
 	ctx       *ApplicationEventContext
-	Cancelled bool
+	cancelled bool
+	lock      sync.RWMutex
 }
 
 func (w *ApplicationEvent) Context() *ApplicationEventContext {
@@ -26,7 +27,15 @@ func newApplicationEvent(id events.ApplicationEventType) *ApplicationEvent {
 }
 
 func (w *ApplicationEvent) Cancel() {
-	w.Cancelled = true
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	w.cancelled = true
+}
+
+func (w *ApplicationEvent) IsCancelled() bool {
+	w.lock.RLock()
+	defer w.lock.RUnlock()
+	return w.cancelled
 }
 
 var applicationEvents = make(chan *ApplicationEvent, 5)
@@ -44,11 +53,20 @@ type CustomEvent struct {
 	Name      string `json:"name"`
 	Data      any    `json:"data"`
 	Sender    string `json:"sender"`
-	Cancelled bool
+	cancelled bool
+	lock      sync.RWMutex
 }
 
 func (e *CustomEvent) Cancel() {
-	e.Cancelled = true
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	e.cancelled = true
+}
+
+func (e *CustomEvent) IsCancelled() bool {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	return e.cancelled
 }
 
 func (e *CustomEvent) ToJSON() string {
@@ -124,15 +142,21 @@ func (e *EventProcessor) Emit(thisEvent *CustomEvent) {
 		if hooks, ok := e.hooks[thisEvent.Name]; ok {
 			for _, thisHook := range hooks {
 				thisHook.callback(thisEvent)
-				if thisEvent.Cancelled {
+				if thisEvent.IsCancelled() {
 					return
 				}
 			}
 		}
 	}
 
-	go e.dispatchEventToListeners(thisEvent)
-	go e.dispatchEventToWindows(thisEvent)
+	go func() {
+		defer handlePanic()
+		e.dispatchEventToListeners(thisEvent)
+	}()
+	go func() {
+		defer handlePanic()
+		e.dispatchEventToWindows(thisEvent)
+	}()
 }
 
 func (e *EventProcessor) Off(eventName string) {
@@ -219,7 +243,13 @@ func (e *EventProcessor) dispatchEventToListeners(event *CustomEvent) {
 		if listener.counter > 0 {
 			listener.counter--
 		}
-		go listener.callback(event)
+		go func() {
+			if event.IsCancelled() {
+				return
+			}
+			defer handlePanic()
+			listener.callback(event)
+		}()
 
 		if listener.counter == 0 {
 			listener.delete = true

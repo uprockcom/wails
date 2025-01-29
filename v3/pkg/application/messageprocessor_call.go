@@ -10,9 +10,8 @@ import (
 type contextKey string
 
 const (
-	CallBinding              = 0
-	WindowNameKey contextKey = "WindowName"
-	WindowIDKey   contextKey = "WindowID"
+	CallBinding            = 0
+	WindowKey   contextKey = "Window"
 )
 
 func (m *MessageProcessor) callErrorCallback(window Window, message string, callID *string, err error) {
@@ -101,11 +100,11 @@ func (m *MessageProcessor) processCallMethod(method int, rw http.ResponseWriter,
 
 		// Set the context values for the window
 		if window != nil {
-			ctx = context.WithValue(ctx, WindowNameKey, window.Name())
-			ctx = context.WithValue(ctx, WindowIDKey, window.ID())
+			ctx = context.WithValue(ctx, WindowKey, window)
 		}
 
 		go func() {
+			defer handlePanic()
 			defer func() {
 				cancel()
 
@@ -116,7 +115,8 @@ func (m *MessageProcessor) processCallMethod(method int, rw http.ResponseWriter,
 
 			result, err := boundMethod.Call(ctx, options.Args)
 			if err != nil {
-				m.callErrorCallback(window, "Error calling method: %s", callID, err)
+				msg := fmt.Sprintf("Error calling method '%v'", boundMethod.Name)
+				m.callErrorCallback(window, msg+": %s", callID, err)
 				return
 			}
 			var jsonResult = []byte("{}")

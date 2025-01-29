@@ -25,6 +25,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Renamed Service methods: `Name` -> `ServiceName`, `OnStartup` -> `ServiceStartup`, `OnShutdown` -> `ServiceShutdown` by [@leaanthony](https://github.com/leaanthony)
+- Moved `Path` and `Paths` methods to `application` package by [@leaanthony](https://github.com/leaanthony)
+
+### Added
+
+- Support aarch64 AppImage builds by [@AkshayKalose](https://github.com/AkshayKalose) in [#3981](https://github.com/wailsapp/wails/pull/3981)
+- Add diagnostics section to `wails doctor` by [@leaanthony](https://github.com/leaanthony)
+- Add window to context when calling a service method by [@leaanthony](https://github.com/leaanthony)
+- Add `window-call` example to demonstrate how to know which window is calling a service by [@leaanthony](https://github.com/leaanthony)
+- New Menu guide by [@leaanthony](https://github.com/leaanthony)
+- Better panic handling by [@leaanthony](https://github.com/leaanthony)
+- New Menu guide by [@leaanthony](https://github.com/leaanthony)
+- Add doc comments for Service API by [@fbbdev](https://github.com/fbbdev) in [#4024](https://github.com/wailsapp/wails/pull/4024)
+- Add function `application.NewServiceWithOptions` to initialise services with additional configuration by [@leaanthony](https://github.com/leaanthony) in [#4024](https://github.com/wailsapp/wails/pull/4024)
+- More documentation by [@leaanthony](https://github.com/leaanthony)
+- Support cancellation of events in standard event listeners by [@leaanthony](https://github.com/leaanthony)
+
+### Fixed
+
+- Fixed Windows+Linux Edit Menu issues by [@leaanthony](https://github.com/leaanthony) in [#3f78a3a](https://github.com/wailsapp/wails/commit/3f78a3a8ce7837e8b32242c8edbbed431c68c062)
+- Updated the minimum system version in macOS .plist files from 10.13.0 to 10.15.0 by [@AkshayKalose](https://github.com/AkshayKalose) in [#3981](https://github.com/wailsapp/wails/pull/3981)
+- Window ID skip issue by [@leaanthony](https://github.com/leaanthony)
+- Fix nil menu issue when calling RegisterContextMenu by [@leaanthony](https://github.com/leaanthony)
+- Fixed dependency cycles in binding generator output by [@fbbdev](https://github.com/fbbdev) in [#4001](https://github.com/wailsapp/wails/pull/4001)
+- Fixed use-before-define errors in binding generator output by [@fbbdev](https://github.com/fbbdev) in [#4001](https://github.com/wailsapp/wails/pull/4001)
+- Pass build flags to binding generator by [@fbbdev](https://github.com/fbbdev) in [#4023](https://github.com/wailsapp/wails/pull/4023)
+
+### Changed
+
+- Removed `application.WindowIDKey` and `application.WindowNameKey` (replaced by `application.WindowKey`) by [@leaanthony](https://github.com/leaanthony)
+- ContextMenuData now returns a string instead of any by [@leaanthony](https://github.com/leaanthony)
+- In JS/TS bindings, class fields of fixed-length array types are now initialized with their expected length instead of being empty by [@fbbdev](https://github.com/fbbdev) in [#4001](https://github.com/wailsapp/wails/pull/4001)
+- ContextMenuData now returns a string instead of any by [@leaanthony](https://github.com/leaanthony)
+- `application.NewService` does not accept options as an optional parameter anymore (use `application.NewServiceWithOptions` instead) by [@leaanthony](https://github.com/leaanthony) in [#4024](https://github.com/wailsapp/wails/pull/4024)
+- Removed `nanoid` dependency by [@leaanthony](https://github.com/leaanthony)
+- Use Vite 6 by [@leaanthony](https://github.com/leaanthony)
+
+## v3.0.0-alpha.9 - 2025-01-13
+
 ### Added
 
 - `app.OpenFileManager(path string, selectFile bool)` to open the system file manager to the path `path` with optional highlighting via `selectFile` by [@Krzysztofz01](https://github.com/Krzysztofz01) [@rcalixte](https://github.com/rcalixte)
@@ -36,9 +77,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `wails3 generate template` command by [@leaanthony](https://github.com/leaanthony)
 - `wails3 releasenotes` command by [@leaanthony](https://github.com/leaanthony)
 - `wails3 update cli` command by [@leaanthony](https://github.com/leaanthony)
+- `-clean` option for `wails3 generate bindings` command by [@leaanthony](https://github.com/leaanthony)
+- Allow for aarch64 (arm64) AppImage Linux builds by [@AkshayKalose](https://github.com/AkshayKalose) in [#3981](https://github.com/wailsapp/wails/pull/3981)
 
 ### Fixed
 
+- Fixed min/max width options for linux by @atterpac in [#3979](https://github.com/wailsapp/wails/pull/3979)
 - Typescript templates types definitions via npm version bump by @atterpac in [#3966](https://github.com/wailsapp/wails/pull/3966)
 - Fix Sveltekit template CSS referance by @atterpac in [#3945](https://github.com/wailsapp/wails/pull/3945)
 - Ensure key callbacks in window run() are called on the main thread by [@leaanthony](https://github.com/leaanthony)
@@ -52,6 +96,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix event handling by [@leaanthony](https://github.com/leaanthony)
 - Fixed window shutdown logic by [@leaanthony](https://github.com/leaanthony)
 - Common taskfile now defaults to generating Typescript bindings for Typescript templates by [@leaanthony](https://github.com/leaanthony)
+- Fix Close application on WM_CLOSE message when no windows are open/systray only by [@mmalcek](https://github.com/mmalcek) in [#3990](https://github.com/wailsapp/wails/pull/3990)
+- Fixed garble build by @5aaee9 in [#3192](https://github.com/wailsapp/wails/pull/3192)
+- Fixed windows nsis builds by [@leaanthony](https://github.com/leaanthony)
 
 ### Changed
 
@@ -63,6 +110,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [Windows] Reduced flicker when opening a window by [@leaanthony](https://github.com/leaanthony)
 - Removed `Window.Destroy` as this was intended to be an internal function by [@leaanthony](https://github.com/leaanthony)
 - Renamed `WindowClose` events to `WindowClosing` by [@leaanthony](https://github.com/leaanthony)
+- Frontend builds now use vite environment "development" or "production" depending on build type by [@leaanthony](https://github.com/leaanthony)
+- Update to go-webview2 v1.19 by [@leaanthony](https://github.com/leaanthony)
 
 ## v3.0.0-alpha.8.3 - 2024-12-07
 

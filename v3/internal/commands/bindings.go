@@ -3,9 +3,8 @@ package commands
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
-
-	"github.com/pterm/pterm"
 
 	"github.com/wailsapp/wails/v3/internal/flags"
 	"github.com/wailsapp/wails/v3/internal/generator"
@@ -20,8 +19,8 @@ func GenerateBindings(options *flags.GenerateBindingsOptions, patterns []string)
 		term.DisableOutput()
 		defer term.EnableOutput()
 	} else if options.Verbose {
-		pterm.EnableDebugMessages()
-		defer pterm.DisableDebugMessages()
+		term.EnableDebug()
+		defer term.DisableDebug()
 	}
 
 	term.Header("Generate Bindings")
@@ -37,6 +36,13 @@ func GenerateBindings(options *flags.GenerateBindingsOptions, patterns []string)
 		return err
 	}
 
+	// Clean the output directory if clean option is enabled
+	if options.Clean {
+		if err := os.RemoveAll(absPath); err != nil {
+			return fmt.Errorf("failed to clean output directory: %w", err)
+		}
+	}
+
 	// Initialise file creator.
 	var creator config.FileCreator
 	if !options.DryRun {
@@ -44,20 +50,18 @@ func GenerateBindings(options *flags.GenerateBindingsOptions, patterns []string)
 	}
 
 	// Start a spinner for progress messages.
-	var spinner *pterm.SpinnerPrinter
-	if term.IsTerminal() {
-		spinner, _ = pterm.DefaultSpinner.Start("Initialising...")
-	}
+	spinner := term.StartSpinner("Initialising...")
 
 	// Initialise and run generator.
 	stats, err := generator.NewGenerator(
 		options,
 		creator,
-		config.DefaultPtermLogger(spinner),
+		spinner.Logger(),
 	).Generate(patterns...)
 
-	// Resolve spinner.
-	resultMessage := fmt.Sprintf(
+	// Stop spinner and print summary.
+	term.StopSpinner(spinner)
+	term.Infof(
 		"Processed: %s, %s, %s, %s, %s in %s.",
 		pluralise(stats.NumPackages, "Package"),
 		pluralise(stats.NumServices, "Service"),
@@ -66,14 +70,9 @@ func GenerateBindings(options *flags.GenerateBindingsOptions, patterns []string)
 		pluralise(stats.NumModels, "Model"),
 		stats.Elapsed().String(),
 	)
-	if spinner != nil {
-		spinner.Info(resultMessage)
-	} else {
-		term.Infofln(resultMessage)
-	}
 
 	// Report output directory.
-	term.Infofln("Output directory: %s", absPath)
+	term.Infof("Output directory: %s", absPath)
 
 	// Process generator error.
 	if err != nil {

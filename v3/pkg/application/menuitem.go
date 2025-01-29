@@ -178,8 +178,8 @@ func NewRole(role Role) *MenuItem {
 		result = NewZoomInMenuItem()
 	case ZoomOut:
 		result = NewZoomOutMenuItem()
-	case Minimize:
-		result = NewMinimizeMenuItem()
+	case Minimise:
+		result = NewMinimiseMenuItem()
 	case Zoom:
 		result = NewZoomMenuItem()
 	case FullScreen:
@@ -262,7 +262,10 @@ func (m *MenuItem) handleClick() {
 		}
 	}
 	if m.callback != nil {
-		go m.callback(ctx)
+		go func() {
+			defer handlePanic()
+			m.callback(ctx)
+		}()
 	}
 }
 

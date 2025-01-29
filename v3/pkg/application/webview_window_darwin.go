@@ -1299,22 +1299,6 @@ func (w *macosWebviewWindow) run() {
 			})
 		})
 
-		// Translate ShouldClose to common WindowClosing event
-		w.parent.OnWindowEvent(events.Mac.WindowShouldClose, func(_ *WindowEvent) {
-			w.parent.emit(events.Common.WindowClosing)
-		})
-
-		// Translate WindowDidResignKey to common WindowLostFocus event
-		w.parent.OnWindowEvent(events.Mac.WindowDidResignKey, func(_ *WindowEvent) {
-			w.parent.emit(events.Common.WindowLostFocus)
-		})
-		w.parent.OnWindowEvent(events.Mac.WindowDidResignMain, func(_ *WindowEvent) {
-			w.parent.emit(events.Common.WindowLostFocus)
-		})
-		w.parent.OnWindowEvent(events.Mac.WindowDidResize, func(_ *WindowEvent) {
-			w.parent.emit(events.Common.WindowDidResize)
-		})
-
 		if options.HTML != "" {
 			w.setHTML(options.HTML)
 		}
@@ -1438,3 +1422,7 @@ func (w *macosWebviewWindow) delete() {
 
 func (w *macosWebviewWindow) redo() {
 }
+
+func (w *macosWebviewWindow) showMenuBar()   {}
+func (w *macosWebviewWindow) hideMenuBar()   {}
+func (w *macosWebviewWindow) toggleMenuBar() {}
