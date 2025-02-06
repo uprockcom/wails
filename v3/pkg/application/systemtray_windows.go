@@ -377,7 +377,7 @@ func (s *windowsSystemTray) setTemplateIcon(_ []byte) {
 	// Unsupported - do nothing
 }
 
-func (s *windowsSystemTray) setIconPosition(position int) {
+func (s *windowsSystemTray) setIconPosition(position IconPosition) {
 	// Unsupported - do nothing
 }
 
@@ -393,4 +393,12 @@ func (s *windowsSystemTray) destroy() {
 	if !w32.ShellNotifyIcon(w32.NIM_DELETE, &nid) {
 		globalApplication.debug(syscall.GetLastError().Error())
 	}
+}
+
+func (s *windowsSystemTray) Show() {
+	// No-op
+}
+
+func (s *windowsSystemTray) Hide() {
+	// No-op
 }

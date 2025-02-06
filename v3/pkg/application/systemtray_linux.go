@@ -112,7 +112,7 @@ func (i systrayMenuItem) dbus() *dbusMenu {
 	return item
 }
 
-func (s *linuxSystemTray) setIconPosition(position int) {
+func (s *linuxSystemTray) setIconPosition(position IconPosition) {
 	s.iconPosition = position
 }
 
@@ -722,6 +722,16 @@ func (s *linuxSystemTray) Scroll(delta int32, orientation string) (err *dbus.Err
 func (s *linuxSystemTray) SecondaryActivate(x int32, y int32) (err *dbus.Error) {
 	s.parent.rightClickHandler()
 	return
+}
+
+// Show is a no-op for Linux
+func (s *linuxSystemTray) Show() {
+	// No-op
+}
+
+// Hide is a no-op for Linux
+func (s *linuxSystemTray) Hide() {
+	// No-op
 }
 
 // tooltip is our data for a tooltip property.
