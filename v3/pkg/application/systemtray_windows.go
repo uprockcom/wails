@@ -3,11 +3,12 @@
 package application
 
 import (
-	"fmt"
-	"github.com/wailsapp/wails/v3/pkg/icons"
+	"errors"
 	"syscall"
 	"time"
 	"unsafe"
+
+	"github.com/wailsapp/wails/v3/pkg/icons"
 
 	"github.com/samber/lo"
 
@@ -120,7 +121,7 @@ func (s *windowsSystemTray) bounds() (*Rect, error) {
 
 	monitor := w32.MonitorFromWindow(s.hwnd, w32.MONITOR_DEFAULTTONEAREST)
 	if monitor == 0 {
-		return nil, fmt.Errorf("failed to get monitor")
+		return nil, errors.New("failed to get monitor")
 	}
 
 	return &Rect{
@@ -186,7 +187,7 @@ func (s *windowsSystemTray) run() {
 	for retries := range 6 {
 		if !w32.ShellNotifyIcon(w32.NIM_ADD, &nid) {
 			if retries == 5 {
-				globalApplication.fatal("Failed to register system tray icon: %v", syscall.GetLastError())
+				globalApplication.fatal("failed to register system tray icon: %w", syscall.GetLastError())
 			}
 
 			time.Sleep(500 * time.Millisecond)
@@ -221,6 +222,10 @@ func (s *windowsSystemTray) run() {
 
 	if s.parent.menu != nil {
 		s.updateMenu(s.parent.menu)
+	}
+
+	if s.parent.tooltip != "" {
+		s.setTooltip(s.parent.tooltip)
 	}
 
 	// Set Default Callbacks
@@ -367,11 +372,35 @@ func (s *windowsSystemTray) updateMenu(menu *Menu) {
 	s.menu.Update()
 }
 
-// ---- Unsupported ----
+// Based on the idea from https://github.com/wailsapp/wails/issues/3487#issuecomment-2633242304
+func (s *windowsSystemTray) setTooltip(tooltip string) {
+	// Ensure the tooltip length is within the limit (64 characters for szTip)
+	if len(tooltip) > 64 {
+		tooltip = tooltip[:64]
+	}
 
-func (s *windowsSystemTray) setLabel(_ string) {
-	// Unsupported - do nothing
+	// Create a new NOTIFYICONDATA structure
+	nid := s.newNotifyIconData()
+	nid.UFlags = w32.NIF_TIP
+	tooltipUTF16, err := w32.StringToUTF16(tooltip)
+	if err != nil {
+		return
+	}
+
+	copy(nid.SzTip[:], tooltipUTF16)
+
+	// Modify the tray icon with the new tooltip
+	if !w32.ShellNotifyIcon(w32.NIM_MODIFY, &nid) {
+		return
+	}
+	nid.UVersion = 3 // Version 4 does not suport
+	if !w32.ShellNotifyIcon(w32.NIM_SETVERSION, &nid) {
+		return
+	}
 }
+
+// ---- Unsupported ----
+func (s *windowsSystemTray) setLabel(label string) {}
 
 func (s *windowsSystemTray) setTemplateIcon(_ []byte) {
 	// Unsupported - do nothing
