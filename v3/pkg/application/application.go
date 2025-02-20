@@ -136,28 +136,6 @@ func New(appOptions Options) *App {
 	result.assets = srv
 	result.assets.LogDetails()
 
-	// Initialize single instance manager if enabled
-	if appOptions.SingleInstance != nil {
-		manager, err := newSingleInstanceManager(result, appOptions.SingleInstance)
-		if err != nil {
-			if errors.Is(err, alreadyRunningError) && manager != nil {
-				err = manager.notifyFirstInstance()
-				if err != nil {
-					globalApplication.error("Failed to notify first instance: " + err.Error())
-				}
-				os.Exit(appOptions.SingleInstance.ExitCode)
-			}
-			result.handleFatalError(fmt.Errorf("failed to initialize single instance manager: %w", err))
-		} else {
-			result.singleInstanceManager = manager
-		}
-	}
-
-	// Amend list of services
-	if appOptions.ServiceFactory != nil {
-		appOptions.Services = append(appOptions.Services, appOptions.ServiceFactory()...)
-	}
-
 	result.bindings, err = NewBindings(appOptions.Services, appOptions.BindAliases)
 	if err != nil {
 		result.handleFatalError(fmt.Errorf("Fatal error in application initialisation: " + err.Error()))
@@ -194,6 +172,23 @@ func New(appOptions Options) *App {
 
 	if appOptions.OnShutdown != nil {
 		result.OnShutdown(appOptions.OnShutdown)
+	}
+
+	// Initialize single instance manager if enabled
+	if appOptions.SingleInstance != nil {
+		manager, err := newSingleInstanceManager(result, appOptions.SingleInstance)
+		if err != nil {
+			if errors.Is(err, alreadyRunningError) && manager != nil {
+				err = manager.notifyFirstInstance()
+				if err != nil {
+					globalApplication.error("Failed to notify first instance: " + err.Error())
+				}
+				os.Exit(appOptions.SingleInstance.ExitCode)
+			}
+			result.handleFatalError(fmt.Errorf("failed to initialize single instance manager: %w", err))
+		} else {
+			result.singleInstanceManager = manager
+		}
 	}
 
 	return result

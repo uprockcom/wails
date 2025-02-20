@@ -31,9 +31,6 @@ type Options struct {
 	// Services allows you to bind Go methods to the frontend.
 	Services []Service
 
-	// ServiceFactory is called once at startup to amend the list of services.
-	ServiceFactory func() []Service
-
 	// BindAliases allows you to specify alias IDs for your bound methods.
 	// Example: `BindAliases: map[uint32]uint32{1: 1411160069}` states that alias ID 1 maps to the Go method with ID 1411160069.
 	BindAliases map[uint32]uint32
