@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"unsafe"
+
 	"github.com/bep/debounce"
 	"github.com/wailsapp/wails/v3/internal/assetserver"
 	"github.com/wailsapp/wails/v3/internal/capabilities"
@@ -376,8 +378,8 @@ func (w *linuxWebviewWindow) startResize(border string) error {
 	return nil
 }
 
-func (w *linuxWebviewWindow) nativeWindowHandle() uintptr {
-	return uintptr(w.window)
+func (w *linuxWebviewWindow) nativeWindow() unsafe.Pointer {
+	return unsafe.Pointer(w.window)
 }
 
 func (w *linuxWebviewWindow) print() error {
@@ -412,6 +414,20 @@ func (w *linuxWebviewWindow) setIgnoreMouseEvents(ignore bool) {
 	w.ignoreMouse(w.ignoreMouseEvents)
 }
 
-func (w *linuxWebviewWindow) showMenuBar()   {}
-func (w *linuxWebviewWindow) hideMenuBar()   {}
-func (w *linuxWebviewWindow) toggleMenuBar() {}
+func (w *linuxWebviewWindow) show() {
+	// Linux implementation is robust - window shows immediately
+	// This is the preferred pattern that Windows should follow
+	w.windowShow()
+}
+
+func (w *linuxWebviewWindow) hide() {
+	// Save position before hiding (consistent with CGO implementation)
+	w.lastX, w.lastY = w.position()
+	w.windowHide()
+}
+
+func (w *linuxWebviewWindow) showMenuBar()                      {}
+func (w *linuxWebviewWindow) hideMenuBar()                      {}
+func (w *linuxWebviewWindow) toggleMenuBar()                    {}
+func (w *linuxWebviewWindow) snapAssist()                       {} // No-op on Linux
+func (w *linuxWebviewWindow) setContentProtection(enabled bool) {}

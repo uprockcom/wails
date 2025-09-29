@@ -18,7 +18,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/goreleaser/nfpm/v2 v2.41.3
 	github.com/jackmordaunt/icns/v2 v2.2.7
-	github.com/jaypipes/ghw v0.13.0
+	github.com/jaypipes/ghw v0.17.0
 	github.com/leaanthony/clir v1.7.0
 	github.com/leaanthony/go-ansi-parser v1.6.1
 	github.com/leaanthony/gosod v1.0.4
@@ -32,6 +32,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pterm/pterm v0.12.80
 	github.com/samber/lo v1.49.1
+	github.com/stretchr/testify v1.10.0
 	github.com/tc-hib/winres v0.3.1
 	github.com/wailsapp/go-webview2 v1.0.21
 	github.com/wailsapp/mimetype v1.4.1
@@ -50,6 +51,7 @@ require (
 	github.com/charmbracelet/x/cellbuf v0.0.13-0.20250311204145-2c3ea96c31dd // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 )
 
 require (
@@ -136,7 +138,7 @@ require (
 	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/exp v0.0.0-20250210185358-939b2ce775ac // indirect
 	golang.org/x/exp/typeparams v0.0.0-20250210185358-939b2ce775ac
-	golang.org/x/image v0.24.0 // indirect
+	golang.org/x/image v0.24.0
 	golang.org/x/mod v0.24.0 // indirect
 	golang.org/x/net v0.37.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect

@@ -1,13 +1,15 @@
 package application
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
 	"runtime"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"text/template"
+	"unsafe"
 
 	"github.com/leaanthony/u"
 
@@ -77,7 +79,7 @@ type (
 		getScreen() (*Screen, error)
 		setFrameless(bool)
 		openContextMenu(menu *Menu, data *ContextMenuData)
-		nativeWindowHandle() uintptr
+		nativeWindow() unsafe.Pointer
 		startDrag() error
 		startResize(border string) error
 		print() error
@@ -109,6 +111,8 @@ type (
 		hideMenuBar()
 		toggleMenuBar()
 		setMenu(menu *Menu)
+		snapAssist()
+		setContentProtection(enabled bool)
 	}
 )
 
@@ -148,7 +152,7 @@ type WebviewWindow struct {
 	cancellers     []func()
 
 	// keyBindings holds the keybindings for the window
-	keyBindings     map[string]func(*WebviewWindow)
+	keyBindings     map[string]func(Window)
 	keyBindingsLock sync.RWMutex
 
 	// menuBindings holds the menu bindings for the window
@@ -165,8 +169,8 @@ type WebviewWindow struct {
 	// pendingJS holds JS that was sent to the window before the runtime was loaded
 	pendingJS []string
 
-	// unconditionallyClose marks the window to be unconditionally closed
-	unconditionallyClose bool
+	// unconditionallyClose marks the window to be unconditionally closed (atomic)
+	unconditionallyClose uint32
 }
 
 func (w *WebviewWindow) SetMenu(menu *Menu) {
@@ -187,7 +191,7 @@ func (w *WebviewWindow) SetMenu(menu *Menu) {
 
 // EmitEvent emits an event from the window
 func (w *WebviewWindow) EmitEvent(name string, data ...any) {
-	globalApplication.emitEvent(&CustomEvent{
+	globalApplication.Event.EmitEvent(&CustomEvent{
 		Name:   name,
 		Data:   data,
 		Sender: w.Name(),
@@ -207,8 +211,11 @@ func getWindowID() uint {
 // FIXME: This should like be an interface method (TDM)
 // Use onApplicationEvent to register a callback for an application event from a window.
 // This will handle tidying up the callback when the window is destroyed
-func (w *WebviewWindow) onApplicationEvent(eventType events.ApplicationEventType, callback func(*ApplicationEvent)) {
-	cancelFn := globalApplication.OnApplicationEvent(eventType, callback)
+func (w *WebviewWindow) onApplicationEvent(
+	eventType events.ApplicationEventType,
+	callback func(*ApplicationEvent),
+) {
+	cancelFn := globalApplication.Event.OnApplicationEvent(eventType, callback)
 	w.addCancellationFunction(cancelFn)
 }
 
@@ -273,10 +280,10 @@ func NewWindow(options WebviewWindowOptions) *WebviewWindow {
 
 	// Listen for window closing events and de
 	result.OnWindowEvent(events.Common.WindowClosing, func(event *WindowEvent) {
-		result.unconditionallyClose = true
+		atomic.StoreUint32(&result.unconditionallyClose, 1)
 		InvokeSync(result.markAsDestroyed)
 		InvokeSync(result.impl.close)
-		globalApplication.deleteWindowByID(result.id)
+		globalApplication.Window.Remove(result.id)
 	})
 
 	// Process keybindings
@@ -287,8 +294,10 @@ func NewWindow(options WebviewWindowOptions) *WebviewWindow {
 	return result
 }
 
-func processKeyBindingOptions(keyBindings map[string]func(window *WebviewWindow)) map[string]func(window *WebviewWindow) {
-	result := make(map[string]func(window *WebviewWindow))
+func processKeyBindingOptions(
+	keyBindings map[string]func(window Window),
+) map[string]func(window Window) {
+	result := make(map[string]func(window Window))
 	for key, callback := range keyBindings {
 		// Parse the key to an accelerator
 		acc, err := parseAccelerator(key)
@@ -310,25 +319,51 @@ func (w *WebviewWindow) addCancellationFunction(canceller func()) {
 
 func (w *WebviewWindow) CallError(callID string, result string, isJSON bool) {
 	if w.impl != nil {
-		w.impl.execJS(fmt.Sprintf("_wails.callErrorHandler('%s', '%s', %t);", callID, template.JSEscapeString(result), isJSON))
+		w.impl.execJS(
+			fmt.Sprintf(
+				"_wails.callErrorHandler('%s', '%s', %t);",
+				callID,
+				template.JSEscapeString(result),
+				isJSON,
+			),
+		)
 	}
 }
 
 func (w *WebviewWindow) CallResponse(callID string, result string) {
 	if w.impl != nil {
-		w.impl.execJS(fmt.Sprintf("_wails.callResultHandler('%s', '%s', true);", callID, template.JSEscapeString(result)))
+		w.impl.execJS(
+			fmt.Sprintf(
+				"_wails.callResultHandler('%s', '%s', true);",
+				callID,
+				template.JSEscapeString(result),
+			),
+		)
 	}
 }
 
 func (w *WebviewWindow) DialogError(dialogID string, result string) {
 	if w.impl != nil {
-		w.impl.execJS(fmt.Sprintf("_wails.dialogErrorCallback('%s', '%s');", dialogID, template.JSEscapeString(result)))
+		w.impl.execJS(
+			fmt.Sprintf(
+				"_wails.dialogErrorCallback('%s', '%s');",
+				dialogID,
+				template.JSEscapeString(result),
+			),
+		)
 	}
 }
 
 func (w *WebviewWindow) DialogResponse(dialogID string, result string, isJSON bool) {
 	if w.impl != nil {
-		w.impl.execJS(fmt.Sprintf("_wails.dialogResultCallback('%s', '%s', %t);", dialogID, template.JSEscapeString(result), isJSON))
+		w.impl.execJS(
+			fmt.Sprintf(
+				"_wails.dialogResultCallback('%s', '%s', %t);",
+				dialogID,
+				template.JSEscapeString(result),
+				isJSON,
+			),
+		)
 	}
 }
 
@@ -481,6 +516,17 @@ func (w *WebviewWindow) SetResizable(b bool) Window {
 	if w.impl != nil {
 		InvokeSync(func() {
 			w.impl.setResizable(b)
+		})
+	}
+	return w
+}
+
+func (w *WebviewWindow) SetContentProtection(b bool) Window {
+	if w.impl == nil {
+		w.options.ContentProtectionEnabled = b
+	} else {
+		InvokeSync(func() {
+			w.impl.setContentProtection(b)
 		})
 	}
 	return w
@@ -741,7 +787,10 @@ func (w *WebviewWindow) Center() {
 }
 
 // OnWindowEvent registers a callback for the given window event
-func (w *WebviewWindow) OnWindowEvent(eventType events.WindowEventType, callback func(event *WindowEvent)) func() {
+func (w *WebviewWindow) OnWindowEvent(
+	eventType events.WindowEventType,
+	callback func(event *WindowEvent),
+) func() {
 	eventID := uint(eventType)
 	windowEventListener := &WindowEventListener{
 		callback: callback,
@@ -762,7 +811,10 @@ func (w *WebviewWindow) OnWindowEvent(eventType events.WindowEventType, callback
 }
 
 // RegisterHook registers a hook for the given window event
-func (w *WebviewWindow) RegisterHook(eventType events.WindowEventType, callback func(event *WindowEvent)) func() {
+func (w *WebviewWindow) RegisterHook(
+	eventType events.WindowEventType,
+	callback func(event *WindowEvent),
+) func() {
 	eventID := uint(eventType)
 	w.eventHooksLock.Lock()
 	defer w.eventHooksLock.Unlock()
@@ -971,6 +1023,16 @@ func (w *WebviewWindow) ToggleMaximise() {
 	})
 }
 
+// ToggleFrameless toggles the window between frameless and normal
+func (w *WebviewWindow) ToggleFrameless() {
+	if w.impl == nil || w.isDestroyed() {
+		return
+	}
+	InvokeSync(func() {
+		w.SetFrameless(!w.options.Frameless)
+	})
+}
+
 func (w *WebviewWindow) OpenDevTools() {
 	if w.impl == nil || w.isDestroyed() {
 		return
@@ -1170,19 +1232,49 @@ func (w *WebviewWindow) Error(message string, args ...any) {
 	globalApplication.error("in window '%s': "+message, args...)
 }
 
-func (w *WebviewWindow) HandleDragAndDropMessage(filenames []string) {
+func (w *WebviewWindow) HandleDragAndDropMessage(filenames []string, dropZone *DropZoneDetails) {
+	globalApplication.debug(
+		"[DragDropDebug] HandleDragAndDropMessage called",
+		"files", filenames,
+		"dropZone", dropZone,
+	)
 	thisEvent := NewWindowEvent()
+	globalApplication.debug(
+		"[DragDropDebug] HandleDragAndDropMessage: thisEvent created",
+		"ctx", thisEvent.ctx,
+	)
 	ctx := newWindowEventContext()
 	ctx.setDroppedFiles(filenames)
+	if dropZone != nil { // Check if dropZone details are available
+		ctx.setDropZoneDetails(dropZone)
+	}
 	thisEvent.ctx = ctx
-	for _, listener := range w.eventListeners[uint(events.Common.WindowFilesDropped)] {
+	globalApplication.debug(
+		"[DragDropDebug] HandleDragAndDropMessage: thisEvent.ctx assigned",
+		"thisEvent.ctx", thisEvent.ctx,
+		"ctx", ctx,
+	)
+	listeners := w.eventListeners[uint(events.Common.WindowDropZoneFilesDropped)]
+	globalApplication.debug(
+		"[DragDropDebug] HandleDragAndDropMessage: Found listeners for WindowDropZoneFilesDropped",
+		"count", len(listeners),
+	)
+	globalApplication.debug(
+		"[DragDropDebug] HandleDragAndDropMessage: Before calling listeners",
+		"thisEvent.ctx", thisEvent.ctx,
+	)
+	for _, listener := range listeners {
+		if listener == nil {
+			fmt.Println("[DragDropDebug] HandleDragAndDropMessage: Skipping nil listener")
+			continue
+		}
 		listener.callback(thisEvent)
 	}
 }
 
 func (w *WebviewWindow) OpenContextMenu(data *ContextMenuData) {
 	// try application level context menu
-	menu, ok := globalApplication.getContextMenu(data.Id)
+	menu, ok := globalApplication.ContextMenu.Get(data.Id)
 	if !ok {
 		w.Error("no context menu found for id: %s", data.Id)
 		return
@@ -1196,12 +1288,17 @@ func (w *WebviewWindow) OpenContextMenu(data *ContextMenuData) {
 	})
 }
 
-// NativeWindowHandle returns the platform native window handle for the window.
-func (w *WebviewWindow) NativeWindowHandle() (uintptr, error) {
+// NativeWindow returns the platform-specific native window handle
+func (w *WebviewWindow) NativeWindow() unsafe.Pointer {
 	if w.impl == nil || w.isDestroyed() {
-		return 0, errors.New("native handle unavailable as window is not running")
+		return nil
 	}
-	return w.impl.nativeWindowHandle(), nil
+	return w.impl.nativeWindow()
+}
+
+// shouldUnconditionallyClose returns whether the window should close unconditionally
+func (w *WebviewWindow) shouldUnconditionallyClose() bool {
+	return atomic.LoadUint32(&w.unconditionallyClose) != 0
 }
 
 func (w *WebviewWindow) Focus() {
@@ -1263,7 +1360,7 @@ func (w *WebviewWindow) processKeyBinding(acceleratorString string) bool {
 		}
 	}
 
-	return globalApplication.processKeyBinding(acceleratorString, w)
+	return globalApplication.KeyBinding.Process(acceleratorString, w)
 }
 
 func (w *WebviewWindow) HandleKeyEvent(acceleratorString string) {
@@ -1382,4 +1479,47 @@ func (w *WebviewWindow) ToggleMenuBar() {
 		return
 	}
 	InvokeSync(w.impl.toggleMenuBar)
+}
+
+func (w *WebviewWindow) InitiateFrontendDropProcessing(filenames []string, x int, y int) {
+	globalApplication.debug(
+		"[DragDropDebug] InitiateFrontendDropProcessing called",
+		"x", x,
+		"y", y,
+	)
+	if w.impl == nil || w.isDestroyed() {
+		return
+	}
+
+	filenamesJSON, err := json.Marshal(filenames)
+	if err != nil {
+		w.Error("Error marshalling filenames for drop processing: %s", err)
+		return
+	}
+
+	jsCall := fmt.Sprintf(
+		"window.wails.Window.HandlePlatformFileDrop(%s, %d, %d);",
+		string(filenamesJSON),
+		x,
+		y,
+	)
+
+	// Ensure JS is executed after runtime is loaded
+	if !w.runtimeLoaded {
+		w.pendingJS = append(w.pendingJS, jsCall)
+		return
+	}
+
+	InvokeSync(func() {
+		w.impl.execJS(jsCall)
+	})
+}
+
+// SnapAssist triggers the Windows Snap Assist feature by simulating Win+Z key combination.
+// On Windows, this opens the snap layout options. On Linux and macOS, this is a no-op.
+func (w *WebviewWindow) SnapAssist() {
+	if w.impl == nil || w.isDestroyed() {
+		return
+	}
+	InvokeSync(w.impl.snapAssist)
 }

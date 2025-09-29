@@ -1,10 +1,13 @@
 package application
 
 func (a *linuxApp) showAboutDialog(title string, message string, icon []byte) {
-	window := globalApplication.getWindowForID(a.getCurrentWindowID())
+	window, _ := globalApplication.Window.GetByID(a.getCurrentWindowID())
 	var parent uintptr
 	if window != nil {
-		parent, _ = window.(*WebviewWindow).NativeWindowHandle()
+		nativeWindow := window.NativeWindow()
+		if nativeWindow != nil {
+			parent = uintptr(nativeWindow)
+		}
 	}
 	about := newMessageDialog(InfoDialogType)
 	about.SetTitle(title).
@@ -24,10 +27,13 @@ type linuxDialog struct {
 
 func (m *linuxDialog) show() {
 	windowId := getNativeApplication().getCurrentWindowID()
-	window := globalApplication.getWindowForID(windowId)
+	window, _ := globalApplication.Window.GetByID(windowId)
 	var parent uintptr
 	if window != nil {
-		parent, _ = window.(*WebviewWindow).NativeWindowHandle()
+		nativeWindow := window.NativeWindow()
+		if nativeWindow != nil {
+			parent = uintptr(nativeWindow)
+		}
 	}
 
 	InvokeAsync(func() {

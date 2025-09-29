@@ -24,9 +24,9 @@ func main() {
 		},
 	})
 
-	systemTray := app.NewSystemTray()
+	systemTray := app.SystemTray.New()
 
-	window := app.NewWebviewWindowWithOptions(application.WebviewWindowOptions{
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Width:         500,
 		Height:        500,
 		Name:          "Systray Demo Window",
@@ -37,8 +37,8 @@ func main() {
 		Windows: application.WindowsWindow{
 			HiddenOnTaskbar: true,
 		},
-		KeyBindings: map[string]func(window *application.WebviewWindow){
-			"F12": func(window *application.WebviewWindow) {
+		KeyBindings: map[string]func(window application.Window){
+			"F12": func(window application.Window) {
 				systemTray.OpenMenu()
 			},
 		},

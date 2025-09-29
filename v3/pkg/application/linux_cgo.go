@@ -77,7 +77,7 @@ extern void handleLoadChanged(WebKitWebView*, WebKitLoadEvent, uintptr_t);
 void handleClick(void*);
 extern gboolean onButtonEvent(GtkWidget *widget, GdkEventButton *event, uintptr_t user_data);
 extern gboolean onMenuButtonEvent(GtkWidget *widget, GdkEventButton *event, uintptr_t user_data);
-extern void onUriList(char **extracted, gpointer data);
+extern void onUriList(char **extracted, gint x, gint y, gpointer data);
 extern gboolean onKeyPressEvent (GtkWidget *widget, GdkEventKey *event, uintptr_t user_data);
 extern void onProcessRequest(WebKitURISchemeRequest *request, uintptr_t user_data);
 extern void sendMessageToBackend(WebKitUserContentManager *contentManager, WebKitJavascriptResult *result, void *data);
@@ -230,7 +230,7 @@ static void on_data_received(GtkWidget *widget, GdkDragContext *context, gint x,
     gchar *uri_data = (gchar *)gtk_selection_data_get_data(selection_data);
     gchar **uri_list = g_uri_list_extract_uris(uri_data);
 
-    onUriList(uri_list, data);
+    onUriList(uri_list, x, y, data);
 
     g_strfreev(uri_list);
     gtk_drag_finish(context, TRUE, TRUE, time);
@@ -277,6 +277,26 @@ type identifier C.uint
 type pointer unsafe.Pointer
 type GSList C.GSList
 type GSListPointer *GSList
+
+// getLinuxWebviewWindow safely extracts a linuxWebviewWindow from a Window interface
+// Returns nil if the window is not a WebviewWindow or not a Linux implementation
+func getLinuxWebviewWindow(window Window) *linuxWebviewWindow {
+	if window == nil {
+		return nil
+	}
+
+	webviewWindow, ok := window.(*WebviewWindow)
+	if !ok {
+		return nil
+	}
+
+	lw, ok := webviewWindow.impl.(*linuxWebviewWindow)
+	if !ok {
+		return nil
+	}
+
+	return lw
+}
 
 var (
 	nilPointer    pointer       = nil
@@ -334,7 +354,7 @@ func processApplicationEvent(eventID C.uint, data pointer) {
 
 	switch event.Id {
 	case uint(events.Linux.SystemThemeChanged):
-		isDark := globalApplication.IsDarkMode()
+		isDark := globalApplication.Env.IsDarkMode()
 		event.Context().setIsDarkMode(isDark)
 	}
 	applicationEvents <- event
@@ -908,13 +928,33 @@ func (w *linuxWebviewWindow) fullscreen() {
 }
 
 func (w *linuxWebviewWindow) getCurrentMonitor() *C.GdkMonitor {
-	// Get the monitor that the window is currently on
 	display := C.gtk_widget_get_display(w.gtkWidget())
 	gdkWindow := C.gtk_widget_get_window(w.gtkWidget())
-	if gdkWindow == nil {
-		return nil
+	if gdkWindow != nil {
+		monitor := C.gdk_display_get_monitor_at_window(display, gdkWindow)
+		if monitor != nil {
+			return monitor
+		}
 	}
-	return C.gdk_display_get_monitor_at_window(display, gdkWindow)
+
+	// Wayland fallback: find monitor containing the current window
+	n_monitors := C.gdk_display_get_n_monitors(display)
+	window_x, window_y := w.position()
+	for i := 0; i < int(n_monitors); i++ {
+		test_monitor := C.gdk_display_get_monitor(display, C.int(i))
+		if test_monitor != nil {
+			var rect C.GdkRectangle
+			C.gdk_monitor_get_geometry(test_monitor, &rect)
+
+			// Check if window is within this monitor's bounds
+			if window_x >= int(rect.x) && window_x < int(rect.x+rect.width) &&
+				window_y >= int(rect.y) && window_y < int(rect.y+rect.height) {
+				return test_monitor
+			}
+		}
+	}
+
+	return nil
 }
 
 func (w *linuxWebviewWindow) getScreen() (*Screen, error) {
@@ -1003,9 +1043,7 @@ func (w *linuxWebviewWindow) gtkWidget() *C.GtkWidget {
 	return (*C.GtkWidget)(w.window)
 }
 
-func (w *linuxWebviewWindow) hide() {
-	// save position
-	w.lastX, w.lastY = w.position()
+func (w *linuxWebviewWindow) windowHide() {
 	C.gtk_widget_hide(w.gtkWidget())
 }
 
@@ -1115,12 +1153,11 @@ func (w *linuxWebviewWindow) setSize(width, height int) {
 		C.gint(height))
 }
 
-func (w *linuxWebviewWindow) show() {
+func (w *linuxWebviewWindow) windowShow() {
 	if w.gtkWidget() == nil {
 		return
 	}
 	C.gtk_widget_show_all(w.gtkWidget())
-	//w.setPosition(w.lastX, w.lastY)
 }
 
 func windowIgnoreMouseEvents(window pointer, webview pointer, ignore bool) {
@@ -1268,7 +1305,7 @@ func (w *linuxWebviewWindow) setURL(uri string) {
 
 //export emit
 func emit(we *C.WindowEvent) {
-	window := globalApplication.getWindowForID(uint(we.id))
+	window, _ := globalApplication.Window.GetByID(uint(we.id))
 	if window != nil {
 		windowEvents <- &windowEvent{
 			WindowID: window.ID(),
@@ -1279,10 +1316,10 @@ func emit(we *C.WindowEvent) {
 
 //export handleConfigureEvent
 func handleConfigureEvent(widget *C.GtkWidget, event *C.GdkEventConfigure, data C.uintptr_t) C.gboolean {
-	window := globalApplication.getWindowForID(uint(data))
+	window, _ := globalApplication.Window.GetByID(uint(data))
 	if window != nil {
-		lw, ok := window.(*WebviewWindow).impl.(*linuxWebviewWindow)
-		if !ok {
+		lw := getLinuxWebviewWindow(window)
+		if lw == nil {
 			return C.gboolean(1)
 		}
 		if lw.lastX != int(event.x) || lw.lastY != int(event.y) {
@@ -1460,12 +1497,12 @@ func onButtonEvent(_ *C.GtkWidget, event *C.GdkEventButton, data C.uintptr_t) C.
 	GdkButtonRelease := C.GDK_BUTTON_RELEASE // 7
 
 	windowId := uint(C.uint(data))
-	window := globalApplication.getWindowForID(windowId)
+	window, _ := globalApplication.Window.GetByID(windowId)
 	if window == nil {
 		return C.gboolean(0)
 	}
-	lw, ok := (window.(*WebviewWindow).impl).(*linuxWebviewWindow)
-	if !ok {
+	lw := getLinuxWebviewWindow(window)
+	if lw == nil {
 		return C.gboolean(0)
 	}
 
@@ -1497,12 +1534,12 @@ func onMenuButtonEvent(_ *C.GtkWidget, event *C.GdkEventButton, data C.uintptr_t
 	GdkButtonRelease := C.GDK_BUTTON_RELEASE // 7
 
 	windowId := uint(C.uint(data))
-	window := globalApplication.getWindowForID(windowId)
+	window, _ := globalApplication.Window.GetByID(windowId)
 	if window == nil {
 		return C.gboolean(0)
 	}
-	lw, ok := (window.(*WebviewWindow).impl).(*linuxWebviewWindow)
-	if !ok {
+	lw := getLinuxWebviewWindow(window)
+	if lw == nil {
 		return C.gboolean(0)
 	}
 
@@ -1516,7 +1553,7 @@ func onMenuButtonEvent(_ *C.GtkWidget, event *C.GdkEventButton, data C.uintptr_t
 }
 
 //export onUriList
-func onUriList(extracted **C.char, data unsafe.Pointer) {
+func onUriList(extracted **C.char, x C.gint, y C.gint, data unsafe.Pointer) {
 	// Credit: https://groups.google.com/g/golang-nuts/c/bI17Bpck8K4/m/DVDa7EMtDAAJ
 	offset := unsafe.Sizeof(uintptr(0))
 	filenames := []string{}
@@ -1528,6 +1565,8 @@ func onUriList(extracted **C.char, data unsafe.Pointer) {
 	windowDragAndDropBuffer <- &dragAndDropMessage{
 		windowId:  uint(*((*C.uint)(data))),
 		filenames: filenames,
+		X:         int(x),
+		Y:         int(y),
 	}
 }
 
@@ -1589,9 +1628,14 @@ func onProcessRequest(request *C.WebKitURISchemeRequest, data C.uintptr_t) {
 	webView := C.webkit_uri_scheme_request_get_web_view(request)
 	windowId := uint(C.get_window_id(unsafe.Pointer(webView)))
 	webviewRequests <- &webViewAssetRequest{
-		Request:    webview.NewRequest(unsafe.Pointer(request)),
-		windowId:   windowId,
-		windowName: globalApplication.getWindowForID(windowId).Name(),
+		Request:  webview.NewRequest(unsafe.Pointer(request)),
+		windowId: windowId,
+		windowName: func() string {
+			if window, ok := globalApplication.Window.GetByID(windowId); ok {
+				return window.Name()
+			}
+			return ""
+		}(),
 	}
 }
 
@@ -1671,9 +1715,12 @@ func runChooserDialog(window pointer, allowMultiple, createFolders, showHidden b
 		displayStr := C.CString(filter.DisplayName)
 		C.gtk_file_filter_set_name(f, displayStr)
 		C.free(unsafe.Pointer(displayStr))
-		patternStr := C.CString(filter.Pattern)
-		C.gtk_file_filter_add_pattern(f, patternStr)
-		C.free(unsafe.Pointer(patternStr))
+		patterns := strings.Split(filter.Pattern, ";")
+		for _, pattern := range patterns {
+			patternStr := C.CString(strings.TrimSpace(pattern))
+			C.gtk_file_filter_add_pattern(f, patternStr)
+			C.free(unsafe.Pointer(patternStr))
+		}
 		C.gtk_file_chooser_add_filter((*C.GtkFileChooser)(fc), f)
 		gtkFilters = append(gtkFilters, f)
 	}
@@ -1748,7 +1795,10 @@ func runOpenFileDialog(dialog *OpenFileDialogStruct) (chan string, error) {
 
 	window := nilPointer
 	if dialog.window != nil {
-		window = (dialog.window.impl).(*linuxWebviewWindow).window
+		nativeWindow := dialog.window.NativeWindow()
+		if nativeWindow != nil {
+			window = pointer(nativeWindow)
+		}
 	}
 
 	buttonText := dialog.buttonText

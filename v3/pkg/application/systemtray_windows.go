@@ -42,12 +42,15 @@ func (s *windowsSystemTray) openMenu() {
 	if err != nil {
 		return
 	}
+	if trayBounds == nil {
+		return
+	}
 
 	// Show the menu at the tray bounds
 	s.menu.ShowAt(trayBounds.X, trayBounds.Y)
 }
 
-func (s *windowsSystemTray) positionWindow(window *WebviewWindow, offset int) error {
+func (s *windowsSystemTray) positionWindow(window Window, offset int) error {
 	// Get the current screen trayBounds
 	currentScreen, err := s.getScreen()
 	if err != nil {
@@ -62,7 +65,8 @@ func (s *windowsSystemTray) positionWindow(window *WebviewWindow, offset int) er
 
 	// systray icons in windows can either be in the taskbar
 	// or in a flyout menu.
-	iconIsInTrayBounds, err := s.iconIsInTrayBounds()
+	var iconIsInTrayBounds bool
+	iconIsInTrayBounds, err = s.iconIsInTrayBounds()
 	if err != nil {
 		return err
 	}
@@ -75,6 +79,9 @@ func (s *windowsSystemTray) positionWindow(window *WebviewWindow, offset int) er
 		trayBounds, err = s.bounds()
 		if err != nil {
 			return err
+		}
+		if trayBounds == nil {
+			return errors.New("failed to get system tray bounds")
 		}
 		*trayBounds = PhysicalToDipRect(*trayBounds)
 		centerAlignX = trayBounds.X + (trayBounds.Width / 2) - (windowBounds.Width / 2)
@@ -114,9 +121,16 @@ func (s *windowsSystemTray) positionWindow(window *WebviewWindow, offset int) er
 }
 
 func (s *windowsSystemTray) bounds() (*Rect, error) {
+	if s.hwnd == 0 {
+		return nil, errors.New("system tray window handle not initialized")
+	}
+	
 	bounds, err := w32.GetSystrayBounds(s.hwnd, s.uid)
 	if err != nil {
 		return nil, err
+	}
+	if bounds == nil {
+		return nil, errors.New("GetSystrayBounds returned nil")
 	}
 
 	monitor := w32.MonitorFromWindow(s.hwnd, w32.MONITOR_DEFAULTTONEAREST)
@@ -133,12 +147,22 @@ func (s *windowsSystemTray) bounds() (*Rect, error) {
 }
 
 func (s *windowsSystemTray) iconIsInTrayBounds() (bool, error) {
+	if s.hwnd == 0 {
+		return false, errors.New("system tray window handle not initialized")
+	}
+	
 	bounds, err := w32.GetSystrayBounds(s.hwnd, s.uid)
 	if err != nil {
 		return false, err
 	}
+	if bounds == nil {
+		return false, errors.New("GetSystrayBounds returned nil")
+	}
 
 	taskbarRect := w32.GetTaskbarPosition()
+	if taskbarRect == nil {
+		return false, errors.New("failed to get taskbar position")
+	}
 
 	inTasksBar := w32.RectInRect(bounds, &taskbarRect.Rc)
 	if inTasksBar {
@@ -149,6 +173,9 @@ func (s *windowsSystemTray) iconIsInTrayBounds() (bool, error) {
 }
 
 func (s *windowsSystemTray) getScreen() (*Screen, error) {
+	if s.hwnd == 0 {
+		return nil, errors.New("system tray window handle not initialized")
+	}
 	// Get the screen for this systray
 	return getScreenForWindowHwnd(s.hwnd)
 }
@@ -212,11 +239,22 @@ func (s *windowsSystemTray) run() {
 		s.darkModeIcon = lo.Must(w32.CreateSmallHIconFromImage(icons.SystrayDark))
 	}
 
+	// Use custom icons if provided
 	if s.parent.icon != nil {
-		s.lightModeIcon = lo.Must(w32.CreateSmallHIconFromImage(s.parent.icon))
+		// Create a new icon and destroy the old one
+		newIcon := lo.Must(w32.CreateSmallHIconFromImage(s.parent.icon))
+		if s.lightModeIcon != 0 && s.lightModeIcon != defaultIcon {
+			w32.DestroyIcon(s.lightModeIcon)
+		}
+		s.lightModeIcon = newIcon
 	}
 	if s.parent.darkModeIcon != nil {
-		s.darkModeIcon = lo.Must(w32.CreateSmallHIconFromImage(s.parent.darkModeIcon))
+		// Create a new icon and destroy the old one
+		newIcon := lo.Must(w32.CreateSmallHIconFromImage(s.parent.darkModeIcon))
+		if s.darkModeIcon != 0 && s.darkModeIcon != defaultIcon && s.darkModeIcon != s.lightModeIcon {
+			w32.DestroyIcon(s.darkModeIcon)
+		}
+		s.darkModeIcon = newIcon
 	}
 	s.uid = nid.UID
 
@@ -246,7 +284,7 @@ func (s *windowsSystemTray) run() {
 	s.updateIcon()
 
 	// Listen for dark mode changes
-	globalApplication.OnApplicationEvent(events.Windows.SystemThemeChanged, func(event *ApplicationEvent) {
+	globalApplication.Event.OnApplicationEvent(events.Windows.SystemThemeChanged, func(event *ApplicationEvent) {
 		s.updateIcon()
 	})
 
@@ -265,6 +303,9 @@ func (s *windowsSystemTray) updateIcon() {
 		return
 	}
 
+	// Store the old icon to destroy it after updating
+	oldIcon := s.currentIcon
+
 	s.currentIcon = newIcon
 	nid := s.newNotifyIconData()
 	nid.UFlags = w32.NIF_ICON
@@ -274,6 +315,11 @@ func (s *windowsSystemTray) updateIcon() {
 
 	if !w32.ShellNotifyIcon(w32.NIM_MODIFY, &nid) {
 		panic(syscall.GetLastError())
+	}
+
+	// Destroy the old icon handle if it exists and is not one of our default icons
+	if oldIcon != 0 && oldIcon != s.lightModeIcon && oldIcon != s.darkModeIcon {
+		w32.DestroyIcon(oldIcon)
 	}
 }
 
@@ -288,6 +334,10 @@ func (s *windowsSystemTray) newNotifyIconData() w32.NOTIFYICONDATA {
 
 func (s *windowsSystemTray) setIcon(icon []byte) {
 	var err error
+	// Destroy the previous light mode icon if it exists
+	if s.lightModeIcon != 0 {
+		w32.DestroyIcon(s.lightModeIcon)
+	}
 	s.lightModeIcon, err = w32.CreateSmallHIconFromImage(icon)
 	if err != nil {
 		panic(syscall.GetLastError())
@@ -301,6 +351,10 @@ func (s *windowsSystemTray) setIcon(icon []byte) {
 
 func (s *windowsSystemTray) setDarkModeIcon(icon []byte) {
 	var err error
+	// Destroy the previous dark mode icon if it exists
+	if s.darkModeIcon != 0 {
+		w32.DestroyIcon(s.darkModeIcon)
+	}
 	s.darkModeIcon, err = w32.CreateSmallHIconFromImage(icon)
 	if err != nil {
 		panic(syscall.GetLastError())
@@ -422,6 +476,17 @@ func (s *windowsSystemTray) destroy() {
 	if !w32.ShellNotifyIcon(w32.NIM_DELETE, &nid) {
 		globalApplication.debug(syscall.GetLastError().Error())
 	}
+
+	// Clean up icon handles
+	if s.lightModeIcon != 0 {
+		w32.DestroyIcon(s.lightModeIcon)
+		s.lightModeIcon = 0
+	}
+	if s.darkModeIcon != 0 && s.darkModeIcon != s.lightModeIcon {
+		w32.DestroyIcon(s.darkModeIcon)
+		s.darkModeIcon = 0
+	}
+	s.currentIcon = 0
 }
 
 func (s *windowsSystemTray) Show() {
