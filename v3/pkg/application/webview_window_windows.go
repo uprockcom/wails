@@ -369,6 +369,11 @@ func (w *windowsWebviewWindow) run() {
 	var parent w32.HWND
 
 	var style uint = w32.WS_OVERLAPPEDWINDOW
+	// If the window should be hidden initially, exclude WS_VISIBLE from the style
+	// This prevents the white window flash reported in issue #4611
+	if options.Hidden {
+		style = style &^ uint(w32.WS_VISIBLE)
+	}
 
 	w.hwnd = w32.CreateWindowEx(
 		uint(exStyle),
@@ -1796,7 +1801,7 @@ func (w *windowsWebviewWindow) isAlwaysOnTop() bool {
 
 // processMessage is given a message sent from JS via the postMessage API
 // We put it on the global window message buffer to be processed centrally
-func (w *windowsWebviewWindow) processMessage(message string) {
+func (w *windowsWebviewWindow) processMessage(message string, sender *edge.ICoreWebView2, args *edge.ICoreWebView2WebMessageReceivedEventArgs) {
 	// We send all messages to the centralised window message buffer
 	windowMessageBuffer <- &windowMessage{
 		windowId: w.parent.id,
