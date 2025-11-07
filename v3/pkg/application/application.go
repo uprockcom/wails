@@ -733,15 +733,6 @@ func (a *App) handleWindowEvent(event *windowEvent) {
 	window.HandleWindowEvent(event.EventID)
 }
 
-// IsShuttingDown returns true if the application is currently shutting down.
-// This is useful for services to avoid calling UI operations that require
-// InvokeSync during shutdown, which would cause a deadlock.
-func (a *App) IsShuttingDown() bool {
-	a.shutdownLock.Lock()
-	defer a.shutdownLock.Unlock()
-	return a.performingShutdown
-}
-
 // OnShutdown adds a function to be run when the application is shutting down.
 func (a *App) OnShutdown(f func()) {
 	if f == nil {
