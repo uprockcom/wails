@@ -5,6 +5,8 @@ includes:
   windows: ./build/windows/Taskfile.yml
   darwin: ./build/darwin/Taskfile.yml
   linux: ./build/linux/Taskfile.yml
+  ios: ./build/ios/Taskfile.yml
+  android: ./build/android/Taskfile.yml
 
 vars:
   APP_NAME: "{{.ProjectName}}"
@@ -32,3 +34,7 @@ tasks:
     cmds:
       - wails3 dev -config ./build/config.yml -port {{ "{{.VITE_PORT}}" }}
 
+  setup:docker:
+    summary: Builds Docker image for cross-compilation (~800MB download)
+    cmds:
+      - task: common:setup:docker

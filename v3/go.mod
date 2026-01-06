@@ -1,6 +1,6 @@
 module github.com/wailsapp/wails/v3
 
-go 1.24.0
+go 1.25
 
 require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
@@ -9,16 +9,20 @@ require (
 	github.com/atterpac/refresh v0.8.6
 	github.com/bep/debounce v1.2.1
 	github.com/charmbracelet/glamour v0.9.0
+	github.com/charmbracelet/huh v0.8.0
 	github.com/ebitengine/purego v0.8.2
 	github.com/go-git/go-git/v5 v5.13.2
+	github.com/go-json-experiment/json v0.0.0-20251027170946-4849db3c2f7e
 	github.com/go-ole/go-ole v1.3.0
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/uuid v1.6.0
 	github.com/goreleaser/nfpm/v2 v2.41.3
+	github.com/gorilla/websocket v1.5.3
 	github.com/jackmordaunt/icns/v2 v2.2.7
 	github.com/jaypipes/ghw v0.17.0
+	github.com/konoui/lipo v0.10.0
 	github.com/leaanthony/clir v1.7.0
 	github.com/leaanthony/go-ansi-parser v1.6.1
 	github.com/leaanthony/gosod v1.0.4
@@ -35,21 +39,31 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/tc-hib/winres v0.3.1
 	github.com/wailsapp/go-webview2 v1.0.22
-	github.com/wailsapp/mimetype v1.4.1
 	github.com/wailsapp/task/v3 v3.40.1-patched3
-	golang.org/x/sys v0.31.0
+	github.com/zalando/go-keyring v0.2.6
+	golang.org/x/sys v0.33.0
 	golang.org/x/term v0.30.0
 	golang.org/x/tools v0.31.0
-	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.36.0
 )
 
 require (
+	al.essio.dev/pkg/shellescape v1.5.1 // indirect
 	atomicgo.dev/schedule v0.1.0 // indirect
+	github.com/atotto/clipboard v0.1.4 // indirect
+	github.com/catppuccin/go v0.3.0 // indirect
+	github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7 // indirect
+	github.com/charmbracelet/bubbletea v1.3.6 // indirect
 	github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc // indirect
-	github.com/charmbracelet/x/cellbuf v0.0.13-0.20250311204145-2c3ea96c31dd // indirect
+	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
+	github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
+	github.com/danieljoos/wincred v1.2.2 // indirect
+	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
+	github.com/konoui/go-qsort v0.1.0 // indirect
+	github.com/mattn/go-localereader v0.0.1 // indirect
+	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 )
@@ -65,7 +79,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/ProtonMail/go-crypto v1.1.6 // indirect
+	github.com/ProtonMail/go-crypto v1.1.6
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/alecthomas/chroma/v2 v2.15.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
@@ -74,7 +88,7 @@ require (
 	github.com/cavaliergopher/cpio v1.0.1 // indirect
 	github.com/chainguard-dev/git-urls v1.0.2 // indirect
 	github.com/charmbracelet/lipgloss v1.1.0 // indirect
-	github.com/charmbracelet/x/ansi v0.8.0 // indirect
+	github.com/charmbracelet/x/ansi v0.9.3 // indirect
 	github.com/cloudflare/circl v1.6.0 // indirect
 	github.com/containerd/console v1.0.4 // indirect
 	github.com/cyphar/filepath-securejoin v0.4.1 // indirect
@@ -141,11 +155,11 @@ require (
 	golang.org/x/image v0.24.0
 	golang.org/x/mod v0.24.0 // indirect
 	golang.org/x/net v0.37.0 // indirect
-	golang.org/x/sync v0.12.0 // indirect
+	golang.org/x/sync v0.15.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	howett.net/plist v1.0.1 // indirect
+	howett.net/plist v1.0.1
 	modernc.org/libc v1.61.13 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.8.2 // indirect

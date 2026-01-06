@@ -152,6 +152,7 @@ var (
 	gtkFileChooserSetAction         func(pointer, int)
 	gtkFileChooserSetCreateFolders  func(pointer, bool)
 	gtkFileChooserSetCurrentFolder  func(pointer, string)
+	gtkFileChooserSetCurrentName    func(pointer, string)
 	gtkFileChooserSetSelectMultiple func(pointer, bool)
 	gtkFileChooserSetShowHidden     func(pointer, bool)
 	gtkFileFilterAddPattern         func(pointer, string)
@@ -178,6 +179,7 @@ var (
 	gtkWidgetGetWindow              func(pointer) pointer
 	gtkWidgetHide                   func(pointer)
 	gtkWidgetIsVisible              func(pointer) bool
+	gtkWidgetRealize                func(pointer)
 	gtkWidgetShow                   func(pointer)
 	gtkWidgetShowAll                func(pointer)
 	gtkWidgetSetAppPaintable        func(pointer, int)
@@ -304,6 +306,7 @@ func init() {
 	purego.RegisterLibFunc(&gtkFileChooserSetAction, gtk, "gtk_file_chooser_set_action")
 	purego.RegisterLibFunc(&gtkFileChooserSetCreateFolders, gtk, "gtk_file_chooser_set_create_folders")
 	purego.RegisterLibFunc(&gtkFileChooserSetCurrentFolder, gtk, "gtk_file_chooser_set_current_folder")
+	purego.RegisterLibFunc(&gtkFileChooserSetCurrentName, gtk, "gtk_file_chooser_set_current_name")
 	purego.RegisterLibFunc(&gtkFileChooserSetSelectMultiple, gtk, "gtk_file_chooser_set_select_multiple")
 	purego.RegisterLibFunc(&gtkFileChooserSetShowHidden, gtk, "gtk_file_chooser_set_show_hidden")
 	purego.RegisterLibFunc(&gtkFileFilterAddPattern, gtk, "gtk_file_filter_add_pattern")
@@ -330,6 +333,7 @@ func init() {
 	purego.RegisterLibFunc(&gtkWidgetGetWindow, gtk, "gtk_widget_get_window")
 	purego.RegisterLibFunc(&gtkWidgetHide, gtk, "gtk_widget_hide")
 	purego.RegisterLibFunc(&gtkWidgetIsVisible, gtk, "gtk_widget_is_visible")
+	purego.RegisterLibFunc(&gtkWidgetRealize, gtk, "gtk_widget_realize")
 	purego.RegisterLibFunc(&gtkWidgetSetAppPaintable, gtk, "gtk_widget_set_app_paintable")
 	purego.RegisterLibFunc(&gtkWidgetSetName, gtk, "gtk_widget_set_name")
 	purego.RegisterLibFunc(&gtkWidgetSetSensitive, gtk, "gtk_widget_set_sensitive")
@@ -391,15 +395,15 @@ func appName() string {
 }
 
 func appNew(name string) pointer {
-	GApplicationDefaultFlags := uint(0)
+	// Use NON_UNIQUE to allow multiple instances of the application to run
+	// This matches the behavior of gtk_init/gtk_main used in v2
+	// G_APPLICATION_NON_UNIQUE = (1 << 5) = 32
+	GApplicationNonUnique := uint(32)
 
-	name = strings.ToLower(name)
-	if name == "" {
-		name = "undefined"
-	}
-	identifier := fmt.Sprintf("org.wails.%s", strings.Replace(name, " ", "-", -1))
+	// Name is already sanitized by sanitizeAppName() in application_linux.go
+	identifier := fmt.Sprintf("org.wails.%s", name)
 
-	return pointer(gtkApplicationNew(identifier, GApplicationDefaultFlags))
+	return pointer(gtkApplicationNew(identifier, GApplicationNonUnique))
 }
 
 func appRun(application pointer) error {
@@ -863,6 +867,11 @@ func windowResize(window pointer, width, height int) {
 }
 
 func windowShow(window pointer) {
+	// Realize the window first to ensure it has a valid GdkWindow.
+	// This prevents crashes on Wayland when appmenu-gtk-module tries to
+	// set DBus properties for global menu integration before the window
+	// is fully realized. See: https://github.com/wailsapp/wails/issues/4769
+	gtkWidgetRealize(pointer(window))
 	gtkWidgetShowAll(pointer(window))
 }
 
@@ -1020,7 +1029,7 @@ func windowMove(window pointer, x, y int) {
 	gtkWindowMove(window, x, y)
 }
 
-func runChooserDialog(window pointer, allowMultiple, createFolders, showHidden bool, currentFolder, title string, action int, acceptLabel string, filters []FileFilter) ([]string, error) {
+func runChooserDialog(window pointer, allowMultiple, createFolders, showHidden bool, currentFolder, title string, action int, acceptLabel string, filters []FileFilter, currentName string) ([]string, error) {
 	GtkResponseCancel := 0
 	GtkResponseAccept := 1
 
@@ -1050,6 +1059,12 @@ func runChooserDialog(window pointer, allowMultiple, createFolders, showHidden b
 
 	if currentFolder != "" {
 		gtkFileChooserSetCurrentFolder(fc, currentFolder)
+	}
+
+	// Set the current name for save dialogs to pre-populate the filename
+	const GtkFileChooserActionSave = 1
+	if currentName != "" && action == GtkFileChooserActionSave {
+		gtkFileChooserSetCurrentName(fc, currentName)
 	}
 
 	buildStringAndFree := func(s pointer) string {
@@ -1121,7 +1136,8 @@ func runOpenFileDialog(dialog *OpenFileDialogStruct) ([]string, error) {
 		dialog.title,
 		GtkFileChooserActionOpen,
 		buttonText,
-		dialog.filters)
+		dialog.filters,
+		"")
 }
 
 func runQuestionDialog(parent pointer, options *MessageDialog) int {
@@ -1202,7 +1218,8 @@ func runSaveFileDialog(dialog *SaveFileDialogStruct) (string, error) {
 		dialog.title,
 		GtkFileChooserActionSave,
 		buttonText,
-		dialog.filters)
+		dialog.filters,
+		dialog.filename)
 
 	if err != nil || len(results) == 0 {
 		return "", err

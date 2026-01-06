@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux && !android
 
 package application
 
@@ -16,6 +16,7 @@ import "C"
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -27,6 +28,29 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
+// sanitizeAppName sanitizes the application name to be a valid GTK/D-Bus application ID.
+// Valid IDs contain only alphanumeric characters, hyphens, and underscores.
+// They must not start with a digit.
+var invalidAppNameChars = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+var leadingDigits = regexp.MustCompile(`^[0-9]+`)
+
+func sanitizeAppName(name string) string {
+	// Replace invalid characters with underscores
+	name = invalidAppNameChars.ReplaceAllString(name, "_")
+	// Prefix with underscore if starts with digit
+	name = leadingDigits.ReplaceAllString(name, "_$0")
+	// Remove consecutive underscores
+	for strings.Contains(name, "__") {
+		name = strings.ReplaceAll(name, "__", "_")
+	}
+	// Trim leading/trailing underscores
+	name = strings.Trim(name, "_")
+	if name == "" {
+		name = "wailsapp"
+	}
+	return strings.ToLower(name)
+}
+
 func init() {
 	// FIXME: This should be handled appropriately in the individual files most likely.
 	// Set GDK_BACKEND=x11 if currently unset and XDG_SESSION_TYPE is unset, unspecified or x11 to prevent warnings
@@ -34,6 +58,24 @@ func init() {
 		(os.Getenv("XDG_SESSION_TYPE") == "" || os.Getenv("XDG_SESSION_TYPE") == "unspecified" || os.Getenv("XDG_SESSION_TYPE") == "x11") {
 		_ = os.Setenv("GDK_BACKEND", "x11")
 	}
+
+	// Disable DMA-BUF renderer on Wayland with NVIDIA to prevent "Error 71 (Protocol error)" crashes.
+	// This is a known WebKitGTK issue with NVIDIA proprietary drivers on Wayland.
+	// See: https://bugs.webkit.org/show_bug.cgi?id=262607
+	if os.Getenv("WEBKIT_DISABLE_DMABUF_RENDERER") == "" &&
+		os.Getenv("XDG_SESSION_TYPE") == "wayland" &&
+		isNVIDIAGPU() {
+		_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+	}
+}
+
+// isNVIDIAGPU checks if an NVIDIA GPU is present by looking for the nvidia kernel module.
+func isNVIDIAGPU() bool {
+	// Check if nvidia module is loaded (most reliable for proprietary driver)
+	if _, err := os.Stat("/sys/module/nvidia"); err == nil {
+		return true
+	}
+	return false
 }
 
 type linuxApp struct {
@@ -102,7 +144,7 @@ func (a *linuxApp) run() error {
 		arg1 := os.Args[1]
 		// Check if the argument is likely a URL from a custom protocol invocation
 		if strings.Contains(arg1, "://") {
-			a.parent.info("Application launched with argument, potentially a URL from custom protocol", "url", arg1)
+			a.parent.debug("Application launched with argument, potentially a URL from custom protocol", "url", arg1)
 			eventContext := newApplicationEventContext()
 			eventContext.setURL(arg1)
 			applicationEvents <- &ApplicationEvent{
@@ -114,7 +156,7 @@ func (a *linuxApp) run() error {
 			if a.parent.options.FileAssociations != nil {
 				ext := filepath.Ext(arg1)
 				if slices.Contains(a.parent.options.FileAssociations, ext) {
-					a.parent.info("File opened via file association", "file", arg1, "extension", ext)
+					a.parent.debug("File opened via file association", "file", arg1, "extension", ext)
 					eventContext := newApplicationEventContext()
 					eventContext.setOpenedWithFile(arg1)
 					applicationEvents <- &ApplicationEvent{
@@ -124,11 +166,11 @@ func (a *linuxApp) run() error {
 					return nil
 				}
 			}
-			a.parent.info("Application launched with single argument (not a URL), potential file open?", "arg", arg1)
+			a.parent.debug("Application launched with single argument (not a URL), potential file open?", "arg", arg1)
 		}
 	} else if len(os.Args) > 2 {
 		// Log if multiple arguments are passed
-		a.parent.info("Application launched with multiple arguments", "args", os.Args[1:])
+		a.parent.debug("Application launched with multiple arguments", "args", os.Args[1:])
 	}
 
 	a.parent.Event.OnApplicationEvent(events.Linux.ApplicationStartup, func(evt *ApplicationEvent) {
@@ -184,8 +226,8 @@ func (a *linuxApp) monitorThemeChanges() {
 		defer handlePanic()
 		conn, err := dbus.ConnectSessionBus()
 		if err != nil {
-			a.parent.info(
-				"[WARNING] Failed to connect to session bus; monitoring for theme changes will not function:",
+			a.parent.warning(
+				"[WARNING] Failed to connect to session bus; monitoring for theme changes will not function: %v",
 				err,
 			)
 			return
@@ -232,11 +274,7 @@ func (a *linuxApp) monitorThemeChanges() {
 }
 
 func newPlatformApp(parent *App) *linuxApp {
-
-	name := strings.ToLower(strings.Replace(parent.options.Name, " ", "", -1))
-	if name == "" {
-		name = "undefined"
-	}
+	name := sanitizeAppName(parent.options.Name)
 	app := &linuxApp{
 		parent:      parent,
 		application: appNew(name),

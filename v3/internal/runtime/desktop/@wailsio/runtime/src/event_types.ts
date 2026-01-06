@@ -57,7 +57,7 @@ export const Types = Object.freeze({
 		WindowUnMinimise: "windows:WindowUnMinimise",
 		WindowMaximise: "windows:WindowMaximise",
 		WindowUnMaximise: "windows:WindowUnMaximise",
-	} as const),
+	}),
 	Mac: Object.freeze({
 		ApplicationDidBecomeActive: "mac:ApplicationDidBecomeActive",
 		ApplicationDidChangeBackingProperties: "mac:ApplicationDidChangeBackingProperties",
@@ -191,7 +191,7 @@ export const Types = Object.freeze({
 		WindowZoomIn: "mac:WindowZoomIn",
 		WindowZoomOut: "mac:WindowZoomOut",
 		WindowZoomReset: "mac:WindowZoomReset",
-	} as const),
+	}),
 	Linux: Object.freeze({
 		ApplicationStartup: "linux:ApplicationStartup",
 		SystemThemeChanged: "linux:SystemThemeChanged",
@@ -200,8 +200,35 @@ export const Types = Object.freeze({
 		WindowDidResize: "linux:WindowDidResize",
 		WindowFocusIn: "linux:WindowFocusIn",
 		WindowFocusOut: "linux:WindowFocusOut",
-		WindowLoadChanged: "linux:WindowLoadChanged",
-	} as const),
+		WindowLoadStarted: "linux:WindowLoadStarted",
+		WindowLoadRedirected: "linux:WindowLoadRedirected",
+		WindowLoadCommitted: "linux:WindowLoadCommitted",
+		WindowLoadFinished: "linux:WindowLoadFinished",
+	}),
+	iOS: Object.freeze({
+		ApplicationDidBecomeActive: "ios:ApplicationDidBecomeActive",
+		ApplicationDidEnterBackground: "ios:ApplicationDidEnterBackground",
+		ApplicationDidFinishLaunching: "ios:ApplicationDidFinishLaunching",
+		ApplicationDidReceiveMemoryWarning: "ios:ApplicationDidReceiveMemoryWarning",
+		ApplicationWillEnterForeground: "ios:ApplicationWillEnterForeground",
+		ApplicationWillResignActive: "ios:ApplicationWillResignActive",
+		ApplicationWillTerminate: "ios:ApplicationWillTerminate",
+		WindowDidLoad: "ios:WindowDidLoad",
+		WindowWillAppear: "ios:WindowWillAppear",
+		WindowDidAppear: "ios:WindowDidAppear",
+		WindowWillDisappear: "ios:WindowWillDisappear",
+		WindowDidDisappear: "ios:WindowDidDisappear",
+		WindowSafeAreaInsetsChanged: "ios:WindowSafeAreaInsetsChanged",
+		WindowOrientationChanged: "ios:WindowOrientationChanged",
+		WindowTouchBegan: "ios:WindowTouchBegan",
+		WindowTouchMoved: "ios:WindowTouchMoved",
+		WindowTouchEnded: "ios:WindowTouchEnded",
+		WindowTouchCancelled: "ios:WindowTouchCancelled",
+		WebViewDidStartNavigation: "ios:WebViewDidStartNavigation",
+		WebViewDidFinishNavigation: "ios:WebViewDidFinishNavigation",
+		WebViewDidFailNavigation: "ios:WebViewDidFailNavigation",
+		WebViewDecidePolicyForNavigationAction: "ios:WebViewDecidePolicyForNavigationAction",
+	}),
 	Common: Object.freeze({
 		ApplicationOpenedWithFile: "common:ApplicationOpenedWithFile",
 		ApplicationStarted: "common:ApplicationStarted",
@@ -229,11 +256,5 @@ export const Types = Object.freeze({
 		WindowZoomIn: "common:WindowZoomIn",
 		WindowZoomOut: "common:WindowZoomOut",
 		WindowZoomReset: "common:WindowZoomReset",
-		WindowDropZoneFilesDropped: "common:WindowDropZoneFilesDropped",
-	} as const),
-} as const);
-
-export const Windows = Types.Windows;
-export const Mac = Types.Mac;
-export const Linux = Types.Linux;
-export const Common = Types.Common;
+	}),
+});

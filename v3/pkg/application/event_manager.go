@@ -3,7 +3,6 @@ package application
 import (
 	"slices"
 
-	"github.com/samber/lo"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
@@ -100,7 +99,9 @@ func (em *EventManager) OnApplicationEvent(eventType events.ApplicationEventType
 		em.app.applicationEventListenersLock.Lock()
 		defer em.app.applicationEventListenersLock.Unlock()
 		// Remove listener
-		em.app.applicationEventListeners[eventID] = lo.Without(em.app.applicationEventListeners[eventID], listener)
+		em.app.applicationEventListeners[eventID] = slices.DeleteFunc(em.app.applicationEventListeners[eventID], func(l *EventListener) bool {
+			return l == listener
+		})
 	}
 }
 
@@ -116,24 +117,15 @@ func (em *EventManager) RegisterApplicationEventHook(eventType events.Applicatio
 
 	return func() {
 		em.app.applicationEventHooksLock.Lock()
-		em.app.applicationEventHooks[eventID] = lo.Without(em.app.applicationEventHooks[eventID], thisHook)
+		em.app.applicationEventHooks[eventID] = slices.DeleteFunc(em.app.applicationEventHooks[eventID], func(h *eventHook) bool {
+			return h == thisHook
+		})
 		em.app.applicationEventHooksLock.Unlock()
 	}
 }
 
 // Dispatch dispatches an event to listeners (internal use)
 func (em *EventManager) dispatch(event *CustomEvent) {
-	// Snapshot windows under RLock
-	em.app.windowsLock.RLock()
-	for _, window := range em.app.windows {
-		if event.IsCancelled() {
-			em.app.windowsLock.RUnlock()
-			return
-		}
-		window.DispatchWailsEvent(event)
-	}
-	em.app.windowsLock.RUnlock()
-
 	// Snapshot listeners under Lock
 	em.app.wailsEventListenerLock.Lock()
 	listeners := slices.Clone(em.app.wailsEventListeners)
