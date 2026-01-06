@@ -216,8 +216,7 @@ func (p *Win32Menu) ShowAt(x int, y int) {
 	}
 
 	if !w32.TrackPopupMenuEx(p.menu, menuFlags, int32(x), int32(y), p.parent, nil) {
-		// We don't know why this sometimes fails but it does
-		return
+		globalApplication.fatal("TrackPopupMenu failed")
 	}
 
 	if p.onMenuClose != nil {
